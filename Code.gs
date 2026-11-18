@@ -21,6 +21,7 @@ const STAFF_HIDDEN = ['sales'];                   // พนักงานมอ
 const STAFF_DELETE = ['leaves','ot','pmoves'];    // พนักงานลบได้ (ยกเลิกคำขอ / ลบบันทึกของตัวเอง)
 const OWNER_KV = ['settings'];
 const SESSION_DAYS = 60;
+const ADMIN_UID = 'u0';                          // อ๊อฟ — ดู/ตั้ง PIN ของทุกคนได้คนเดียว
 const DEFAULT_USERS = [
   ['u4','โอ้','owner','เจ้าของร้าน','5678'],
   ['u5','เอ้','owner','เจ้าของร้าน','9012'],
@@ -35,7 +36,7 @@ const DEFAULT_USERS = [
 function setup() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   COLLS.concat(['kv']).forEach(sh_);
-  sysSheet_('pins', ['uid', 'hash']);
+  sysSheet_('pins', PIN_HEAD);
   sysSheet_('sessions', ['token', 'uid', 'expires']);
   const props = PropertiesService.getScriptProperties();
   if (!props.getProperty('SALT')) props.setProperty('SALT', Utilities.getUuid());
@@ -50,6 +51,7 @@ function setup() {
     });
     sh_('users').getRange(sh_('users').getLastRow() + 1, 1, rows.length, 4).setValues(rows);
   }
+  backfillPins_();
   photoFolder_();
   ['Sheet1', 'ชีต1', 'แผ่นงาน1'].forEach(n => {
     const s = ss.getSheetByName(n);
@@ -93,7 +95,7 @@ const ACTIONS = {
     const token = Utilities.getUuid() + Utilities.getUuid().slice(0, 8);
     sysSheet_('sessions', ['token', 'uid', 'expires']).appendRow([token, uid, Date.now() + SESSION_DAYS * 864e5]);
     cache.put('t_' + token, uid, 21600);
-    return { token, user: { id: user.id, name: user.name, role: user.role, pos: user.pos } };
+    return { token, user: { id: user.id, name: user.name, role: user.role, pos: user.pos, admin: user.id === ADMIN_UID } };
   },
 
   logout(b) {
@@ -113,7 +115,7 @@ const ACTIONS = {
     });
     const kv = {};
     readRows_('kv').forEach(r => { if (!r.del) kv[r.id] = JSON.parse(r.json); });
-    return { data, kv, ts, me: user };
+    return { data, kv, ts, me: Object.assign({}, user, { admin: user.id === ADMIN_UID }) };
   },
 
   changes(b) {
@@ -166,7 +168,7 @@ const ACTIONS = {
 
   setPin(b) {
     const user = auth_(b.token), uid = String(b.uid || ''), pin = String(b.pin || '');
-    if (user.role !== 'owner' && uid !== user.id) throw new Error('ไม่มีสิทธิ์');
+    if (user.id !== ADMIN_UID) throw new Error('เฉพาะอ๊อฟเท่านั้นที่ตั้ง PIN ให้คนอื่นได้');
     if (!/^\d{4,6}$/.test(pin)) throw new Error('PIN ต้องเป็นตัวเลข 4–6 หลัก');
     setPin_(uid, pin);
     return {};
@@ -178,6 +180,16 @@ const ACTIONS = {
     if (!/^\d{4,6}$/.test(pin)) throw new Error('PIN ต้องเป็นตัวเลข 4–6 หลัก');
     setPin_(user.id, pin);
     return {};
+  },
+
+  /* รายการ PIN ทุกคน — ดูได้เฉพาะ ADMIN */
+  listPins(b) {
+    const user = auth_(b.token);
+    if (user.id !== ADMIN_UID) throw new Error('ไม่มีสิทธิ์ดู PIN');
+    backfillPins_();
+    const v = sysSheet_('pins', PIN_HEAD).getDataRange().getValues(), m = {};
+    for (let i = 1; i < v.length; i++) m[String(v[i][0])] = { pin: String(v[i][2] || ''), at: Number(v[i][3]) || 0 };
+    return { pins: m };
   },
 
   photo(b) {
@@ -253,15 +265,29 @@ function hash_(uid, pin) {
   const d = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, salt + '|' + uid + '|' + pin, Utilities.Charset.UTF_8);
   return d.map(x => ('0' + ((x + 256) % 256).toString(16)).slice(-2)).join('');
 }
+const PIN_HEAD = ['uid', 'hash', 'pin', 'updatedAt'];
 function getPinHash_(uid) {
-  const v = sysSheet_('pins', ['uid', 'hash']).getDataRange().getValues();
+  const v = sysSheet_('pins', PIN_HEAD).getDataRange().getValues();
   for (let i = 1; i < v.length; i++) if (String(v[i][0]) === uid) return String(v[i][1]);
   return null;
 }
+/** เก็บ PIN ทั้งแบบเข้ารหัส (ใช้ตรวจตอนเข้าระบบ) และตัวจริง (ให้อ๊อฟเปิดดูเผื่อมีคนลืม) */
 function setPin_(uid, pin) {
-  const sh = sysSheet_('pins', ['uid', 'hash']), v = sh.getDataRange().getValues(), h = hash_(uid, pin);
-  for (let i = 1; i < v.length; i++) if (String(v[i][0]) === uid) { sh.getRange(i + 1, 2).setValue(h); return; }
-  sh.appendRow([uid, h]);
+  const sh = sysSheet_('pins', PIN_HEAD), v = sh.getDataRange().getValues(), h = hash_(uid, pin), now = Date.now();
+  sh.getRange('C:C').setNumberFormat('@');
+  for (let i = 1; i < v.length; i++) if (String(v[i][0]) === uid) { sh.getRange(i + 1, 2, 1, 3).setValues([[h, String(pin), now]]); return; }
+  sh.appendRow([uid, h, String(pin), now]);
+}
+/** แถวเก่าที่ยังไม่มี PIN ตัวจริง: ถ้ายังเป็น PIN เริ่มต้นอยู่ ให้เติมให้ */
+function backfillPins_() {
+  const sh = sysSheet_('pins', PIN_HEAD), v = sh.getDataRange().getValues();
+  if (v[0].length < 4 || v[0][2] !== 'pin') sh.getRange(1, 1, 1, 4).setValues([PIN_HEAD]).setFontWeight('bold');
+  sh.getRange('C:C').setNumberFormat('@');
+  const def = {}; DEFAULT_USERS.forEach(([id, , , , pin]) => def[id] = pin);
+  for (let i = 1; i < v.length; i++) {
+    const uid = String(v[i][0]);
+    if (!v[i][2] && def[uid] && String(v[i][1]) === hash_(uid, def[uid])) sh.getRange(i + 1, 3, 1, 2).setValues([[def[uid], Date.now()]]);
+  }
 }
 
 /* ===================== Sheets storage ===================== */

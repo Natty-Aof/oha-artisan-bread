@@ -387,7 +387,7 @@ function doLogin(){if(LIVE)return doLoginLive();
 }
 document.getElementById('loginBtn').onclick=doLogin;
 document.getElementById('pin').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
-function logout(){if(LIVE){if(diff().n){flush();return toast('กำลังบันทึกข้อมูล… ลองออกอีกครั้งในไม่กี่วินาที')}api('logout').catch(()=>{});TOKEN=null;lsSet('oha-token',null);clearInterval(pollT)}closeModal();ME=null;try{sessionStorage.removeItem('oha-me')}catch(e){};document.getElementById('app').style.display='none';document.getElementById('login').style.display='flex';renderLogin()}
+function logout(){PINS={};ui.showPins=false;if(LIVE){if(diff().n){flush();return toast('กำลังบันทึกข้อมูล… ลองออกอีกครั้งในไม่กี่วินาที')}api('logout').catch(()=>{});TOKEN=null;lsSet('oha-token',null);clearInterval(pollT)}closeModal();ME=null;try{sessionStorage.removeItem('oha-me')}catch(e){};document.getElementById('app').style.display='none';document.getElementById('login').style.display='flex';renderLogin()}
 
 /* ================= SHELL ================= */
 function startApp(){
@@ -753,9 +753,10 @@ function sumUp(){const e=document.getElementById('sSum');if(e)e.value='฿'+mone
 
 /* ================= STAFF & SETTINGS ================= */
 VIEWS.staff=()=>{const st=S.settings;
-  return head('พนักงาน & ตั้งค่า','จัดการผู้ใช้ PIN กะงาน โควตาวันลา และสินค้า',`<button class="btn p" onclick="editUser()">+ เพิ่มพนักงาน</button>`)+`
-  <div class="card mb"><h3>ผู้ใช้งาน</h3><div class="tbl"><table><tr><th>ชื่อ</th><th>ตำแหน่ง</th><th>สิทธิ์</th><th>PIN</th><th></th></tr>
-  ${S.users.map(u=>`<tr><td><b>${esc(u.name)}</b></td><td>${esc(u.pos)}</td><td>${u.role==='owner'?'<span class="pill terra">เจ้าของ</span>':'<span class="pill neu">พนักงาน</span>'}</td><td class="en">••••</td><td class="n"><button class="btn sm g" onclick="editUser('${u.id}')">แก้ไข</button></td></tr>`).join('')}</table></div>
+  return head('พนักงาน & ตั้งค่า','จัดการผู้ใช้ PIN กะงาน โควตาวันลา และสินค้า',isAdmin()?`<button class="btn p" onclick="editUser()">+ เพิ่มพนักงาน</button>`:'')+`
+  <div class="card mb"><h3>ผู้ใช้งาน</h3><div class="tbl"><table><tr><th>ชื่อ</th><th>ตำแหน่ง</th><th>สิทธิ์</th><th>PIN ${isAdmin()?`<button class="btn sm g" onclick="togglePins()" style="padding:0 6px">${ui.showPins?'🙈 ซ่อน':'👁 แสดง'}</button>`:''}</th><th></th></tr>
+  ${S.users.map(u=>`<tr><td><b>${esc(u.name)}</b></td><td>${esc(u.pos)}</td><td>${u.role==='owner'?'<span class="pill terra">เจ้าของ</span>':'<span class="pill neu">พนักงาน</span>'}</td><td class="en">${pinCell(u)}</td><td class="n"><button class="btn sm g" onclick="editUser('${u.id}')">แก้ไข</button></td></tr>`).join('')}</table></div>
+  ${isAdmin()?'<div class="note" style="margin-top:12px;background:var(--terra-l)">🔒 เฉพาะอ๊อฟที่เห็น PIN ของทุกคน และตั้ง/รีเซ็ต PIN ให้คนอื่นได้ — เมื่อใครเปลี่ยน PIN เอง ระบบจะบันทึก PIN ใหม่ไว้ให้ที่นี่</div>':''}
   <div class="note" style="margin-top:12px">พนักงานเห็นเฉพาะ: ลงเวลา, ขอลา/OT, สต็อก (รับเข้า/เบิกใช้ ไม่เห็นต้นทุน), รายงานประจำวันของตัวเอง — ไม่เห็นยอดขายและแดชบอร์ด</div></div>
   <div class="card mb"><h3>📍 ตำแหน่งร้าน (GPS สำหรับลงเวลา)${G().lat!=null?`<span class="r"><a href="${mapUrl(G())}" target="_blank" style="color:var(--terra)">ดูบนแผนที่ →</a></span>`:''}</h3>
    <label class="f"><span>ชื่อสถานที่ (แสดงตอนเช็คอิน)</span><input id="gPlace" value="${esc(G().place||'')}" placeholder="เช่น OHA ARTISAN BREAD สาขาตัวเมือง"></label>
@@ -784,18 +785,23 @@ function saveGeo(){const g=G(),la=val('gLat'),ln=val('gLng');
   if((la&&!ln)||(!la&&ln)||(la&&(Math.abs(+la)>90||Math.abs(+ln)>180)))return toast('พิกัดไม่ถูกต้อง');
   g.lat=la?+la:null;g.lng=ln?+ln:null;g.radius=Math.max(20,+val('gRad')||100);g.maxAcc=Math.max(20,+val('gAcc')||150);g.policy=val('gPol');g.place=val('gPlace').trim()||'OHA ARTISAN BREAD';g.selfie=val('gSelf');g.sim=LIVE?'off':val('gSim');save();toast('บันทึกตำแหน่งร้านแล้ว');rerender()}
 function saveSettings(){const st=S.settings;st.shiftStart=val('stS');st.stdHours=+val('stH')||8;st.breakHours=+val('stB')||0;document.querySelectorAll('.q').forEach(q=>st.quota[q.dataset.k]=+q.value||0);save();toast('บันทึกการตั้งค่าแล้ว')}
-function editUser(id){const u=id?S.users.find(x=>x.id===id):{name:'',pos:'',role:'staff',pin:''};
+let PINS={},ME_ADMIN=false;
+const isAdmin=()=>!!ME&&(LIVE?ME_ADMIN:ME.id==='u0');
+function pinCell(u){if(!isAdmin())return '••••';if(!ui.showPins)return '••••';const p=LIVE?PINS[u.id]:u.pin;return p?`<b style="letter-spacing:.15em">${esc(p)}</b>`:'<span style="color:var(--muted);font-size:12px">ไม่ทราบ (ให้รีเซ็ต)</span>'}
+async function togglePins(){ui.showPins=!ui.showPins;if(ui.showPins&&LIVE){try{const r=await api('listPins');PINS={};Object.keys(r.pins).forEach(k=>{if(r.pins[k].pin)PINS[k]=r.pins[k].pin})}catch(e){ui.showPins=false;return toast(e.message)}}if(!ui.showPins)PINS={};rerender()}
+function editUser(id){if(!id&&!isAdmin())return toast('เพิ่มผู้ใช้ได้เฉพาะอ๊อฟ');const u=id?S.users.find(x=>x.id===id):{name:'',pos:'',role:'staff',pin:''};
   modal(`<h2>${id?'แก้ไข':'เพิ่ม'}ผู้ใช้</h2><label class="f"><span>ชื่อเล่น</span><input id="uN" value="${esc(u.name)}"></label><label class="f"><span>ตำแหน่ง</span><input id="uP" value="${esc(u.pos)}" placeholder="เช่น เบเกอร์, หน้าร้าน"></label>
   <div class="grid g2"><label class="f"><span>สิทธิ์</span><select id="uR"><option value="staff" ${u.role==='staff'?'selected':''}>พนักงาน</option><option value="owner" ${u.role==='owner'?'selected':''}>เจ้าของ / ผู้จัดการ</option></select></label>
-  <label class="f"><span>${LIVE&&id?'ตั้ง PIN ใหม่ (เว้นว่าง = ไม่เปลี่ยน)':'PIN (4–6 หลัก)'}</span><input id="uPin" inputmode="numeric" maxlength="6" value="${LIVE?'':esc(u.pin||'')}"></label></div>
+  ${isAdmin()?`<label class="f"><span>${id?'PIN (แก้เพื่อรีเซ็ต)':'PIN (4–6 หลัก)'}</span><input id="uPin" inputmode="numeric" maxlength="6" value="${esc(id?(LIVE?(PINS[id]||''):(u.pin||'')):'')}" placeholder="${id&&LIVE&&!PINS[id]?'ไม่ทราบ PIN — ใส่เพื่อรีเซ็ต':''}"></label>`:'<div class="hint" style="align-self:end;margin-bottom:12px">PIN ตั้งได้เฉพาะอ๊อฟ</div>'}</div>
   <div class="row end">${id&&id!==ME.id?'<button class="btn g danger" id="uDel">ลบ</button><span class="sp"></span>':''}<button class="btn" onclick="closeModal()">ยกเลิก</button><button class="btn p" id="uOk">บันทึก</button></div>`);
-  document.getElementById('uOk').onclick=async()=>{const p=val('uPin');if(!val('uN').trim())return toast('ระบุชื่อ');
-    if((p||!id||!LIVE)&&!/^\d{4,6}$/.test(p))return toast('PIN ต้องเป็นตัวเลข 4–6 หลัก');
+  document.getElementById('uOk').onclick=async()=>{const pe=document.getElementById('uPin'),p0=pe?pe.value.trim():'';if(!val('uN').trim())return toast('ระบุชื่อ');
+    const orig=id?(LIVE?(PINS[id]||''):(u.pin||'')):'',p=(isAdmin()&&p0&&p0!==orig)?p0:'';
+    if(isAdmin()&&(!id||p0)&&!/^\d{4,6}$/.test(p0))return toast('PIN ต้องเป็นตัวเลข 4–6 หลัก');
     if(id===ME.id&&val('uR')!=='owner'&&S.users.filter(x=>x.role==='owner').length<2)return toast('ต้องมีเจ้าของร้านอย่างน้อย 1 คน');
-    const o={name:val('uN').trim(),pos:val('uP').trim(),role:val('uR')};if(!LIVE)o.pin=p;
+    const o={name:val('uN').trim(),pos:val('uP').trim(),role:val('uR')};if(!LIVE&&p)o.pin=p;
     let uidv=id;if(id)Object.assign(u,o);else{uidv=uid();S.users.push({id:uidv,...o})}
     save();closeModal();rerender();
-    if(LIVE&&p){try{await flush();await api('setPin',{uid:uidv,pin:p});toast('บันทึกแล้ว — ตั้ง PIN ใหม่เรียบร้อย')}catch(e){toast('บันทึกข้อมูลแล้ว แต่ตั้ง PIN ไม่สำเร็จ: '+e.message)}}else toast('บันทึกแล้ว')};
+    if(LIVE&&p){try{await flush();await api('setPin',{uid:uidv,pin:p});PINS[uidv]=p;rerender();toast('บันทึกแล้ว — ตั้ง PIN ใหม่เรียบร้อย')}catch(e){toast('บันทึกข้อมูลแล้ว แต่ตั้ง PIN ไม่สำเร็จ: '+e.message)}}else toast('บันทึกแล้ว')};
   if(id&&id!==ME.id)document.getElementById('uDel').onclick=()=>confirmBox('ลบผู้ใช้ “'+esc(u.name)+'”? (ประวัติเดิมยังอยู่)',()=>{S.users=S.users.filter(x=>x.id!==id);save();rerender()});
 }
 function copyBackup(){const txt=JSON.stringify(S);if(navigator.clipboard)navigator.clipboard.writeText(txt).then(()=>toast('คัดลอกแล้ว — วางเก็บใน Notes / LINE / Drive'),()=>showBackup(txt));else showBackup(txt)}
@@ -1345,7 +1351,7 @@ async function loadAll(){const r=await api('load');S=emptyState();COLLS.forEach(
   Object.keys(r.kv||{}).forEach(k=>{if(k==='settings')S.settings=r.kv[k];else if(k.indexOf('dayClosed:')===0)S.dayClosed[k.slice(10)]=r.kv[k]});
   applyDefaults(S);G().sim='off';LAST_TS=r.ts;SNAP=snapOf(S);
   if(!r.kv||!r.kv.settings)delete SNAP.kv.settings;          // ส่งค่าตั้งต้นขึ้นเซิร์ฟเวอร์ครั้งแรก
-  return r.me}
+  ME_ADMIN=!!(r.me&&r.me.admin);return r.me}
 function bootstrapIfEmpty(){if(!isOwner())return;let ch=false;
   if(!S.goods.length){S.goods=defaultGoods();syncProducts();ch=true}
   if(!S.items.length){S.items=defaultItems(false);ch=true}
