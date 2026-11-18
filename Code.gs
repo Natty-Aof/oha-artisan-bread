@@ -24,6 +24,7 @@ const SESSION_DAYS = 60;
 const DEFAULT_USERS = [
   ['u4','โอ้','owner','เจ้าของร้าน','5678'],
   ['u5','เอ้','owner','เจ้าของร้าน','9012'],
+  ['u6','พี่โม','owner','เจ้าของร้าน','2468'],
   ['u0','อ๊อฟ','owner','เจ้าของร้าน','1234'],
   ['u1','เปรี้ยว','staff','พนักงาน','1111'],
   ['u2','บีม','staff','พนักงาน','2222'],
@@ -38,13 +39,16 @@ function setup() {
   sysSheet_('sessions', ['token', 'uid', 'expires']);
   const props = PropertiesService.getScriptProperties();
   if (!props.getProperty('SALT')) props.setProperty('SALT', Utilities.getUuid());
-  if (!readRows_('users').length) {
+  // เพิ่มผู้ใช้เริ่มต้นที่ยังไม่มี (รันซ้ำได้ ไม่ทับข้อมูลเดิม)
+  const have = indexRows_('users');
+  const missing = DEFAULT_USERS.filter(([id]) => !have[id]);
+  if (missing.length) {
     const now = Date.now();
-    const rows = DEFAULT_USERS.map(([id, name, role, pos, pin]) => {
+    const rows = missing.map(([id, name, role, pos, pin]) => {
       setPin_(id, pin);
       return [id, now, false, JSON.stringify({ id, name, role, pos })];
     });
-    sh_('users').getRange(2, 1, rows.length, 4).setValues(rows);
+    sh_('users').getRange(sh_('users').getLastRow() + 1, 1, rows.length, 4).setValues(rows);
   }
   photoFolder_();
   ['Sheet1', 'ชีต1', 'แผ่นงาน1'].forEach(n => {

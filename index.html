@@ -184,7 +184,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
         <input id="pin" type="password" inputmode="numeric" maxlength="6" placeholder="รหัส PIN">
         <button class="btn p" id="loginBtn" style="min-width:96px">เข้าระบบ</button>
       </div>
-      <div class="hint" id="pinHint">PIN ตัวอย่าง: โอ้ 5678 · เอ้ 9012 · อ๊อฟ 1234 · เปรี้ยว 1111 · บีม 2222 · จ๋า 3333</div>
+      <div class="hint" id="pinHint">PIN ตัวอย่าง: โอ้ 5678 · เอ้ 9012 · พี่โม 2468 · อ๊อฟ 1234 · เปรี้ยว 1111 · บีม 2222 · จ๋า 3333</div>
     </div>
   </div>
 </section>
@@ -250,6 +250,7 @@ function seed(){
   const users=[
     {id:'u4',name:'โอ้',role:'owner',pos:'เจ้าของร้าน',pin:'5678'},
     {id:'u5',name:'เอ้',role:'owner',pos:'เจ้าของร้าน',pin:'9012'},
+    {id:'u6',name:'พี่โม',role:'owner',pos:'เจ้าของร้าน',pin:'2468'},
     {id:'u0',name:'อ๊อฟ',role:'owner',pos:'เจ้าของร้าน',pin:'1234'},
     {id:'u1',name:'เปรี้ยว',role:'staff',pos:'พนักงาน',pin:'1111'},
     {id:'u2',name:'บีม',role:'staff',pos:'พนักงาน',pin:'2222'},
@@ -284,6 +285,7 @@ function migrate(d){if(!d.goods||d.menuV!==2){Object.assign(d,seedProd());d.menu
     d.users.forEach(u=>{if(nm[u.id]){u.name=nm[u.id];if(u.role==='staff')u.pos='พนักงาน'}});
     const ord=['u4','u5','u0','u1','u2','u3'];d.users.sort((a,b)=>(ord.indexOf(a.id)+1||99)-(ord.indexOf(b.id)+1||99));
     (d.wcust||[]).forEach(c=>{if(c.contact==='คุณบีม')c.contact='คุณมายด์'});d.namesV=1}
+  if(!d.users.some(u=>u.id==='u6')){const i=d.users.findIndex(u=>u.id==='u0');d.users.splice(i<0?0:i,0,{id:'u6',name:'พี่โม',role:'owner',pos:'เจ้าของร้าน',pin:'2468'})}
   if(!d.ownersV){['u4','u5'].forEach((id,i)=>{if(!d.users.some(u=>u.id===id))d.users.splice(i,0,{id,name:i?'เอ้':'โอ้',role:'owner',pos:'เจ้าของร้าน',pin:i?'9012':'5678'})});d.ownersV=1}
   if(!d.members){Object.assign(d,seedMembers())}
   return applyDefaults(d)}
@@ -373,7 +375,7 @@ function niceStep(x){const p=Math.pow(10,Math.floor(Math.log10(x||1)));const n=x
 let pickId=null;
 function renderLogin(){
   document.getElementById('loginLogo').innerHTML=logoSVG('#E58B5C',220);
-  document.getElementById('userPick').innerHTML=S.users.map(u=>`<button data-id="${u.id}" class="${pickId===u.id?'sel':''}">${esc(u.name)}<small>${esc(u.pos)}</small></button>`).join('');
+  document.getElementById('userPick').innerHTML=S.users.slice().sort((a,b)=>(a.role==='owner'?0:1)-(b.role==='owner'?0:1)).map(u=>`<button data-id="${u.id}" class="${pickId===u.id?'sel':''}">${esc(u.name)}<small>${esc(u.pos)}</small></button>`).join('');
   document.querySelectorAll('#userPick button').forEach(b=>b.onclick=()=>{pickId=b.dataset.id;renderLogin();document.getElementById('pin').focus()});
 }
 function doLogin(){if(LIVE)return doLoginLive();
