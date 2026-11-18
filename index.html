@@ -639,11 +639,11 @@ VIEWS.stock=()=>{
   if(f==='low')list=list.filter(i=>stockLevel(i)!=='ok'); else if(f!=='all')list=list.filter(i=>i.cat===f);
   const nLow=S.items.filter(i=>stockLevel(i)==='low').length;
   const moves=S.moves.slice(-30).reverse();
-  return head('สต็อกวัตถุดิบ',`${S.items.length} รายการ · ต่ำกว่าขั้นต่ำ ${nLow} รายการ`,own?`<button class="btn p" onclick="editItem()">+ เพิ่มวัตถุดิบ</button>`:'')+`
+  return head('สต็อกวัตถุดิบ',`${S.items.length} รายการ · ต่ำกว่าขั้นต่ำ ${nLow} รายการ`,own?`<button class="btn danger" id="bulkDel" style="display:none" onclick="bulkDelItems()">🗑 ลบที่เลือก</button><button class="btn p" onclick="editItem()">+ เพิ่มวัตถุดิบ</button>`:'')+`
   <div class="row mb"><div class="tabs"><button class="${f==='all'?'on':''}" onclick="ui.stockFilter='all';rerender()">ทั้งหมด</button><button class="${f==='low'?'on':''}" onclick="ui.stockFilter='low';rerender()">ใกล้หมด</button></div>
   <select style="width:auto" onchange="ui.stockFilter=this.value;rerender()"><option value="all">ทุกหมวด</option>${cats.map(c=>`<option ${f===c?'selected':''}>${c}</option>`).join('')}</select></div>
-  <div class="card mb"><div class="tbl"><table><tr><th>วัตถุดิบ</th><th class="hide-m">หมวด</th><th class="n">คงเหลือ</th><th style="min-width:110px">ระดับ</th>${own?'<th class="n">ต้นทุน/หน่วย</th><th class="n">มูลค่า</th>':''}<th></th></tr>
-  ${list.map(i=>{const lv=stockLevel(i);return `<tr><td><b>${esc(i.name)}</b></td><td class="hide-m"><span class="pill neu">${esc(i.cat)}</span></td><td class="n"><b class="en">${num(i.qty)}</b> ${esc(i.unit)}</td>
+  <div class="card mb"><div class="tbl"><table><tr>${own?'<th style="width:28px"><input type="checkbox" title="เลือกทั้งหมด" style="width:auto" onchange="document.querySelectorAll(\'.itSel\').forEach(c=>c.checked=this.checked);selCount()"></th>':''}<th>วัตถุดิบ</th><th class="hide-m">หมวด</th><th class="n">คงเหลือ</th><th style="min-width:110px">ระดับ</th>${own?'<th class="n">ต้นทุน/หน่วย</th><th class="n">มูลค่า</th>':''}<th></th></tr>
+  ${list.map(i=>{const lv=stockLevel(i);return `<tr>${own?`<td><input type="checkbox" class="itSel" value="${i.id}" style="width:auto" onchange="selCount()"></td>`:''}<td><b>${esc(i.name)}</b></td><td class="hide-m"><span class="pill neu">${esc(i.cat)}</span></td><td class="n"><b class="en">${num(i.qty)}</b> ${esc(i.unit)}</td>
   <td><div class="meter"><i class="${lv==='low'?'low':lv==='mid'?'mid':''}" style="width:${Math.min(100,i.qty/(i.min*3)*100)}%"></i></div><div style="font-size:11.5px;color:var(--muted);margin-top:3px">${lv==='low'?'⚠ ต่ำกว่าขั้นต่ำ':lv==='mid'?'ใกล้ขั้นต่ำ':'ปกติ'} · ขั้นต่ำ ${num(i.min)}</div></td>
   ${own?`<td class="n">฿${num(i.cost,2)}</td><td class="n">฿${money(i.qty*i.cost)}</td>`:''}
   <td class="n" style="white-space:nowrap"><button class="btn sm" onclick="moveItem('${i.id}','in')">รับเข้า</button> <button class="btn sm" onclick="moveItem('${i.id}','out')">เบิกใช้</button>${own?` <button class="btn sm g" onclick="editItem('${i.id}')">แก้ไข</button>`:''}</td></tr>`}).join('')||'<tr><td colspan="7" class="empty">ไม่มีรายการ</td></tr>'}
@@ -652,6 +652,10 @@ VIEWS.stock=()=>{
   ${moves.map(m=>{const it=S.items.find(i=>i.id===m.itemId)||{name:'(ลบแล้ว)',unit:''};return `<tr><td>${thDate(m.at.slice(0,10))} ${hm(m.at)}</td><td>${esc(it.name)}</td><td>${m.type==='in'?'<span class="pill good">รับเข้า</span>':m.type==='out'?'<span class="pill terra">เบิกใช้</span>':'<span class="pill neu">ปรับยอด</span>'}</td><td class="n">${m.type==='out'?'-':'+'}${num(m.qty)} ${esc(it.unit)}</td><td>${esc(U(m.uid).name)}</td><td>${esc(m.note)}</td></tr>`}).join('')||'<tr><td colspan="6" class="empty">ยังไม่มีการรับเข้า/เบิกใช้</td></tr>'}
   </table></div></div>`;
 };
+function selCount(){const n=document.querySelectorAll('.itSel:checked').length,b=document.getElementById('bulkDel');if(b){b.style.display=n?'':'none';b.textContent='🗑 ลบที่เลือก ('+n+')'}}
+function bulkDelItems(){const ids=[...document.querySelectorAll('.itSel:checked')].map(c=>c.value);if(!ids.length)return;
+  const names=S.items.filter(i=>ids.includes(i.id)).map(i=>esc(i.name));
+  confirmBox(`ลบวัตถุดิบ ${ids.length} รายการ?<div style="font-size:13px;color:var(--muted);margin-top:6px;max-height:140px;overflow:auto">${names.join(', ')}</div><div style="font-size:13px;color:var(--muted);margin-top:6px">ประวัติรับเข้า/เบิกใช้เดิมยังอยู่</div>`,()=>{S.items=S.items.filter(i=>!ids.includes(i.id));save();toast('ลบแล้ว '+ids.length+' รายการ');rerender()})}
 function moveItem(id,type){const it=S.items.find(i=>i.id===id);
   modal(`<h2>${type==='in'?'รับเข้า':'เบิกใช้'} — ${esc(it.name)}</h2><p style="color:var(--muted);margin-bottom:12px">คงเหลือปัจจุบัน ${num(it.qty)} ${esc(it.unit)}</p>
   <label class="f"><span>จำนวน (${esc(it.unit)})</span><input type="number" step="any" min="0" id="mQty" autofocus></label>
