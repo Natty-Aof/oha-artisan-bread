@@ -15,10 +15,10 @@
  */
 
 const TZ = 'Asia/Bangkok';
-const COLLS = ['users','items','moves','sales','attendance','ot','leaves','reports','goods','pmoves','wcust','worders','members','memberTx','expenses'];
-const API_VERSION = 3;
-const OWNER_WRITE = ['users','sales'];            // พนักงานแก้ไม่ได้
-const STAFF_HIDDEN = ['sales'];                   // พนักงานมองไม่เห็น
+const COLLS = ['users','items','moves','sales','attendance','ot','leaves','reports','goods','pmoves','wcust','worders','members','memberTx','expenses','bills'];
+const API_VERSION = 5;
+const OWNER_WRITE = ['users'];                    // พนักงานแก้ไม่ได้
+const STAFF_HIDDEN = [];                          // (ยอดขาย: พนักงานเห็นเฉพาะของวันนี้ — ดู canSee_)
 const STAFF_DELETE = ['leaves','ot','pmoves','expenses'];    // พนักงานลบได้ (ยกเลิกคำขอ / ลบบันทึกของตัวเอง)
 const OWNER_KV = ['settings'];
 const SESSION_DAYS = 60;
@@ -149,6 +149,16 @@ const ACTIONS = {
           if (!rec || !rec.id) return;
           rec.id = String(rec.id);
           const old = existing[rec.id] && !existing[rec.id].del ? JSON.parse(existing[rec.id].json) : null;
+          if (c === 'sales' && user.role !== 'owner') {               // พนักงานลงสรุปยอดได้เฉพาะของวันนี้
+            const today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+            if (rec.date !== today || (old && old.date !== today)) { skipped++; return; }
+            rec.by = user.id;
+          }
+          if (c === 'bills' && user.role !== 'owner') {
+            const today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+            if (old && old.date !== today) { skipped++; return; }        // พนักงานแก้/ยกเลิกบิลย้อนหลังไม่ได้
+            rec.by = old ? old.by : user.id;
+          }
           if (c === 'expenses') { const r = fixExpense_(rec, old, user); if (!r) { skipped++; return; } (fixed[c] = fixed[c] || []).push(r); list.push(r); return; }
           if (c === 'attendance') { const r = fixAttendance_(rec, old, user, existing); if (!r) { skipped++; return; } (fixed[c] = fixed[c] || []).push(r); list.push(r); return; }
           if (!owner && (c === 'leaves' || c === 'ot') && rec.status !== 'pending' && (!old || old.status !== rec.status)) { skipped++; return; }
@@ -207,7 +217,9 @@ const ACTIONS = {
 /* ===================== รายจ่าย ===================== */
 /** พนักงานเห็นเฉพาะรายจ่ายที่ตัวเองจ่าย/บันทึก */
 function canSee_(c, x, user) {
-  if (c !== 'expenses' || user.role === 'owner') return true;
+  if (user.role === 'owner') return true;
+  if (c === 'sales') return x.date === Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+  if (c !== 'expenses') return true;
   return x.payer === user.id || x.by === user.id;
 }
 function fixExpense_(rec, old, user) {
