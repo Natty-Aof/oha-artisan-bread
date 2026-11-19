@@ -15,12 +15,13 @@
  */
 
 const TZ = 'Asia/Bangkok';
-const COLLS = ['users','items','moves','sales','attendance','ot','leaves','reports','goods','pmoves','wcust','worders','members','memberTx','expenses','bills'];
-const API_VERSION = 5;
-const OWNER_WRITE = ['users'];                    // พนักงานแก้ไม่ได้
+const COLLS = ['users','items','moves','sales','attendance','ot','leaves','reports','goods','pmoves','wcust','worders','members','memberTx','expenses','bills','shifts'];
+const API_VERSION = 6;
+const OWNER_WRITE = ['users','shifts'];                    // พนักงานแก้ไม่ได้
 const STAFF_HIDDEN = [];                          // (ยอดขาย: พนักงานเห็นเฉพาะของวันนี้ — ดู canSee_)
 const STAFF_DELETE = ['leaves','ot','pmoves','expenses'];    // พนักงานลบได้ (ยกเลิกคำขอ / ลบบันทึกของตัวเอง)
-const OWNER_KV = ['settings'];
+const OWNER_KV = ['settings','payroll'];
+const OWNER_KV_READ = ['payroll'];               // ค่าจ้าง: เฉพาะผู้จัดการเห็น
 const SESSION_DAYS = 60;
 const ADMIN_UID = 'u0';                          // อ๊อฟ — ดู/ตั้ง PIN ของทุกคนได้คนเดียว
 const DEFAULT_USERS = [
@@ -115,7 +116,7 @@ const ACTIONS = {
         readRows_(c).filter(r => !r.del).map(r => JSON.parse(r.json)).filter(x => canSee_(c, x, user));
     });
     const kv = {};
-    readRows_('kv').forEach(r => { if (!r.del) kv[r.id] = JSON.parse(r.json); });
+    readRows_('kv').forEach(r => { if (!r.del && (user.role === 'owner' || OWNER_KV_READ.indexOf(r.id) < 0)) kv[r.id] = JSON.parse(r.json); });
     return { data, kv, ts, v: API_VERSION, me: Object.assign({}, user, { admin: user.id === ADMIN_UID }) };
   },
 
@@ -129,7 +130,7 @@ const ACTIONS = {
       if (out.length) data[c] = out;
     });
     const kv = {};
-    readRows_('kv').filter(r => r.ts > since).forEach(r => { kv[r.id] = r.del ? null : JSON.parse(r.json); });
+    readRows_('kv').filter(r => r.ts > since && (user.role === 'owner' || OWNER_KV_READ.indexOf(r.id) < 0)).forEach(r => { kv[r.id] = r.del ? null : JSON.parse(r.json); });
     return { data, kv, ts };
   },
 
