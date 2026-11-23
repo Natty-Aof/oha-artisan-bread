@@ -16,8 +16,8 @@
 
 const TZ = 'Asia/Bangkok';
 const COLLS = ['users','items','moves','sales','attendance','ot','leaves','reports','goods','pmoves','wcust','worders','members','memberTx','expenses','bills','shifts'];
-const API_VERSION = 7;
-const GEMINI_MODELS = ['gemini-flash-latest', 'gemini-3.5-flash', 'gemini-2.5-flash'];  // ลองตามลำดับ
+const API_VERSION = 8;
+const GEMINI_MODELS = ['gemini-flash-latest', 'gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-flash-lite-latest', 'gemini-2.5-flash-lite'];  // ลองตามลำดับ
 const OWNER_WRITE = ['users','shifts'];                    // พนักงานแก้ไม่ได้
 const STAFF_HIDDEN = [];                          // (ยอดขาย: พนักงานเห็นเฉพาะของวันนี้ — ดู canSee_)
 const STAFF_DELETE = ['leaves','ot','pmoves','expenses'];    // พนักงานลบได้ (ยกเลิกคำขอ / ลบบันทึกของตัวเอง)
@@ -219,7 +219,13 @@ const ACTIONS = {
     if (user.id !== ADMIN_UID) throw new Error('เฉพาะอ๊อฟเท่านั้นที่ตั้งค่า AI ได้');
     const key = String(b.key || '').trim(), p = PropertiesService.getScriptProperties();
     if (!key) { p.deleteProperty('GEMINI_KEY'); return { configured: false }; }
-    const r = geminiCall_(key, [{ text: 'ตอบคำว่า OK เป็น JSON {"ok":true}' }]);   // ทดสอบ key
+    let r;
+    try { r = geminiCall_(key, [{ text: 'ตอบคำว่า OK เป็น JSON {"ok":true}' }]); }   // ทดสอบ key
+    catch (e) {
+      // key ผ่านการยืนยันตัวตนแล้ว แต่ Gemini ไม่ว่าง/ติดโควตาชั่วคราว → บันทึก key ไว้ก่อน
+      if (e.busy) { p.setProperty('GEMINI_KEY', key); p.deleteProperty('GEMINI_MODEL'); return { configured: true, model: '', busy: true }; }
+      throw e;
+    }
     p.setProperty('GEMINI_KEY', key); p.setProperty('GEMINI_MODEL', r.model);
     return { configured: true, model: r.model };
   },
@@ -247,25 +253,31 @@ const ACTIONS = {
 /* ===================== AI อ่านบิล (Gemini) ===================== */
 function geminiCall_(key, parts, prefer) {
   const models = (prefer ? [prefer] : []).concat(GEMINI_MODELS.filter(x => x !== prefer));
-  let last = '';
+  let last = '', busy = 0;
   for (const model of models) {
-    const res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
-      method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': key },
-      payload: JSON.stringify({ contents: [{ role: 'user', parts: parts }], generationConfig: { responseMimeType: 'application/json', temperature: 0.1 } })
-    });
-    const code = res.getResponseCode(), txt = res.getContentText();
-    if (code === 404) { last = model + ' ไม่พบ'; continue; }
-    if (code !== 200) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
+        method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': key },
+        payload: JSON.stringify({ contents: [{ role: 'user', parts: parts }], generationConfig: { responseMimeType: 'application/json', temperature: 0.1 } })
+      });
+      const code = res.getResponseCode(), txt = res.getContentText();
       let msg = txt; try { msg = JSON.parse(txt).error.message; } catch (e) {}
+      if (code === 404) { last = model + ' ไม่พบ'; break; }
       if (code === 400 && /API key/i.test(msg)) throw new Error('Gemini API key ไม่ถูกต้อง');
-      if (code === 429) throw new Error('ใช้ AI อ่านบิลถี่เกินโควตาฟรี — รอสักครู่แล้วลองใหม่');
-      throw new Error('Gemini ตอบกลับผิดพลาด (' + code + '): ' + String(msg).slice(0, 200));
+      if (code === 401 || code === 403) throw new Error('Gemini API key ไม่ถูกต้องหรือไม่มีสิทธิ์ (' + code + ')');
+      if (code === 429 || code === 500 || code === 503 || code === 504) {
+        busy++; last = model + ' ไม่ว่าง (' + code + ')';
+        if (attempt === 0) { Utilities.sleep(1500); continue; }   // ลองซ้ำ 1 ครั้ง
+        break;                                                    // แล้วเปลี่ยนไปโมเดลถัดไป
+      }
+      if (code !== 200) throw new Error('Gemini ตอบกลับผิดพลาด (' + code + '): ' + String(msg).slice(0, 200));
+      const j = JSON.parse(txt), c = (j.candidates || [])[0];
+      const out = c && c.content && c.content.parts ? c.content.parts.map(x => x.text || '').join('') : '';
+      let data; try { data = JSON.parse(out.replace(/^```(json)?|```$/g, '').trim()); } catch (e) { throw new Error('AI อ่านบิลไม่สำเร็จ — ลองถ่ายให้ชัดขึ้น'); }
+      return { model, data };
     }
-    const j = JSON.parse(txt), c = (j.candidates || [])[0];
-    const out = c && c.content && c.content.parts ? c.content.parts.map(x => x.text || '').join('') : '';
-    let data; try { data = JSON.parse(out.replace(/^```(json)?|```$/g, '').trim()); } catch (e) { throw new Error('AI อ่านบิลไม่สำเร็จ — ลองถ่ายให้ชัดขึ้น'); }
-    return { model, data };
   }
+  if (busy) { const e = new Error('ตอนนี้ Gemini มีคนใช้เยอะ/ติดโควตาชั่วคราว — รอ 1–2 นาทีแล้วลองใหม่'); e.busy = true; throw e; }
   throw new Error('ไม่พบโมเดล Gemini ที่ใช้ได้ (' + last + ')');
 }
 function scanPrompt_(b) {
