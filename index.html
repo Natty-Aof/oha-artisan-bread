@@ -1013,7 +1013,7 @@ function prodDay(){const d=ui.pdate||today(),own=isOwner(),rows=sheet(d),closed=
   const best=rows.filter(r=>r.sale+r.whs>0).sort((a,b)=>(b.sale+b.whs)-(a.sale+a.whs));
   return `<div class="row mb"><input type="date" value="${d}" style="width:auto" onchange="ui.pdate=this.value;rerender()">
     ${closed?`<span class="pill good">✓ ปิดยอดแล้ว · ${esc(U(closed.by).name)} ${hm(closed.at)}</span>`:'<span class="pill warn">ยังไม่ปิดยอด</span>'}<span class="sp"></span>
-    <button class="btn" onclick="morningForm('${d}')">ผลิตรอบเช้า</button><button class="btn" onclick="recvForm('${d}')">📦 รับสินค้ามาขาย</button>${own?`<button class="btn" onclick="scanBill('supplier_invoice')">📷 สแกนบิลรับของ</button>`:''}<button class="btn" onclick="moveForm('${d}',null,'add')">+ ทำเพิ่ม</button><button class="btn" onclick="moveForm('${d}',null,'promo')">+ เบิกโปรโมท</button><button class="btn p" onclick="closeDayForm('${d}')">${closed?'แก้ไขการปิดยอด':'ปิดยอด (นับของเหลือ)'}</button></div>
+    ${own?`<button class="btn" onclick="openingForm('${d}')">📋 นับสต็อกยกมา</button>`:''}<button class="btn" onclick="morningForm('${d}')">ผลิตรอบเช้า</button><button class="btn" onclick="recvForm('${d}')">📦 รับสินค้ามาขาย</button>${own?`<button class="btn" onclick="scanBill('supplier_invoice')">📷 สแกนบิลรับของ</button>`:''}<button class="btn" onclick="moveForm('${d}',null,'add')">+ ทำเพิ่ม</button><button class="btn" onclick="moveForm('${d}',null,'promo')">+ เบิกโปรโมท</button><button class="btn p" onclick="closeDayForm('${d}')">${closed?'แก้ไขการปิดยอด':'ปิดยอด (นับของเหลือ)'}</button></div>
   <div class="grid g4 mb">
     <div class="card kpi"><div class="lb">ผลิตวันนี้ (เช้า + ทำเพิ่ม)</div><div class="v">${num(T('prod')+T('add'))} <small>ชิ้น</small></div><div class="d">ทำเพิ่มระหว่างวัน ${num(T('add'))} · ยกมา ${num(T('carry'))}${T('recv')?' · รับมาขาย '+num(T('recv')):''}</div></div>
     <div class="card kpi"><div class="lb">ขายออก (หน้าร้าน + ส่ง)</div><div class="v">${num(T('sale')+T('whs'))} <small>ชิ้น</small></div><div class="d">หน้าร้าน ${num(T('sale'))} · ขายส่ง ${num(T('whs'))}${own?' · ฿'+money(frontRev):''}</div></div>
@@ -1033,8 +1033,20 @@ function prodDay(){const d=ui.pdate||today(),own=isOwner(),rows=sheet(d),closed=
   <td class="n">${!m.ref&&(own||(m.uid===ME.id&&!closed))?`<button class="btn sm g danger" onclick="delMove('${m.id}')">ลบ</button>`:''}</td></tr>`).join('')||'<tr><td colspan="7" class="empty">ยังไม่มีบันทึก</td></tr>'}</table></div></div>`;
 }
 function delMove(id){confirmBox('ลบรายการนี้?',()=>{const mv=S.pmoves.find(m=>m.id===id);S.pmoves=S.pmoves.filter(m=>m.id!==id);if(mv)syncAutoStock(mv.date);save();rerender()})}
+/* นับสต็อกยกมา / ตั้งยอดเริ่มต้น (เจ้าของ) — กรอกจำนวนที่นับได้จริงของทุกสินค้า */
+function openingForm(d){const rows=sheet(d);
+  modal(`<h2>📋 นับสต็อกยกมา — ${thDate(d)}</h2><p class="muted" style="font-size:14px;margin:-4px 0 12px">กรอกจำนวนสินค้าที่นับได้จริงตอนเริ่มวัน (ใช้ตอนเริ่มใช้ระบบ หรือแก้ยอดยกมาให้ตรงกับของจริง) · ช่องว่าง = ไม่เปลี่ยน</p>
+  <div class="tbl" style="max-height:55vh;overflow:auto"><table><tr><th>สินค้า</th><th class="n">ยกมาในระบบ</th><th class="n" style="width:120px">นับได้จริง</th></tr>
+  ${rows.map(r=>`<tr><td><div class="row" style="gap:8px;flex-wrap:nowrap">${thumb(r.g,32)}${esc(r.g.name)}</div></td><td class="n">${num(r.carry)}</td><td class="n"><input type="number" min="0" data-g="${r.g.id}" class="opQ" style="width:100px;text-align:right" placeholder="${r.carry}"></td></tr>`).join('')}</table></div>
+  <div class="row end" style="margin-top:14px"><button class="btn" onclick="closeModal()">ยกเลิก</button><button class="btn p" id="opOk">บันทึกยอดยกมา</button></div>`);
+  document.getElementById('opOk').onclick=()=>{let n=0;
+    document.querySelectorAll('.opQ').forEach(inp=>{if(inp.value==='')return;const want=Math.max(0,Math.round(+inp.value)),gid=inp.dataset.g;
+      const fromClose=S.pmoves.filter(m=>m.date===d&&m.gid===gid&&m.type==='carry'&&String(m.ref||'').startsWith('close:')).reduce((a,m)=>a+ +m.qty,0);
+      S.pmoves=S.pmoves.filter(m=>!(m.date===d&&m.gid===gid&&m.type==='carry'&&m.ref==='count'));
+      const diff=want-fromClose;if(diff)pmove(d,gid,'carry',diff,fromClose?'ปรับยอดตามที่นับจริง':'ยอดยกมา (นับสต็อก)','count');n++});
+    save();closeModal();toast(n?'บันทึกยอดยกมา '+n+' รายการ':'ไม่มีการเปลี่ยนแปลง');rerender()}}
 function moveForm(d,gid,type){type=type||'sale';
-  const types=['add','sale','promo','waste','prod'];
+  const types=['add','sale','promo','waste','prod'].concat(isOwner()?['carry']:[]);
   modal(`<h2>บันทึกสินค้า — ${thDate(d)}</h2>
   <label class="f"><span>สินค้า</span><select id="pvG">${GA().map(g=>`<option value="${g.id}" ${g.id===gid?'selected':''}>${esc(g.name)}</option>`).join('')}</select></label>
   <label class="f"><span>ประเภท</span><select id="pvT" onchange="document.getElementById('pvPR').style.display=this.value==='promo'?'':'none'">${types.map(k=>`<option value="${k}" ${k===type?'selected':''}>${PT[k]}</option>`).join('')}</select></label>
