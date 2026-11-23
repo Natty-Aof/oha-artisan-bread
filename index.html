@@ -826,6 +826,7 @@ VIEWS.staff=()=>{const st=S.settings;
    ${LIVE?'':`<label class="f"><span>โหมดจำลองตำแหน่ง (สำหรับทดสอบในหน้าพรีวิว)</span><select id="gSim"><option value="off" ${G().sim==='off'?'selected':''}>ปิด — ใช้ GPS จริง</option><option value="in" ${G().sim==='in'?'selected':''}>จำลอง: อยู่ในร้าน</option><option value="out" ${G().sim==='out'?'selected':''}>จำลอง: อยู่นอกร้าน (~2 กม.)</option></select></label>`}</div>
    ${LIVE?"":'<div class="row" style="margin-bottom:12px"><div class="note sp">GPS จริงทำงานเมื่อเปิดผ่านเว็บ HTTPS (เช่น GitHub Pages) บนมือถือ — หน้าพรีวิวใน Claude ถูกบล็อกการเข้าถึงตำแหน่ง จึงให้ใช้โหมดจำลองเพื่อทดสอบขั้นตอนไปก่อน</div></div>'}
    <div class="row end"><button class="btn p" onclick="saveGeo()">บันทึกตำแหน่งร้าน</button></div></div>
+  ${isAdmin()?`<div class="card mb"><h3>🤖 AI อ่านบิล (Gemini)<span class="r">เฉพาะอ๊อฟ</span></h3><div class="row"><div class="sp" style="font-size:14px;color:var(--ink2)">${!LIVE?'ใช้ได้ในระบบจริงเท่านั้น':SERVER_V<7?'ต้องอัปเดตโค้ด Apps Script เป็นเวอร์ชันล่าสุดก่อน':ui.aiStat?(ui.aiStat.configured?'<span class="pill good">✓ เชื่อมต่อแล้ว</span> '+esc(ui.aiStat.model||''):'<span class="pill warn">ยังไม่ได้ใส่ API key</span>'):'กำลังตรวจสอบ…'} · ถ่ายรูปบิล ใบเสร็จ สลิป หรือใบสรุปยอด POS แล้วระบบกรอกฟอร์มให้</div>${LIVE&&SERVER_V>=7?'<button class="btn" onclick="aiKeyForm()">ตั้งค่า API key</button>':''}</div></div>`:''}
   <div class="card mb"><h3>💵 ค่าจ้าง (ใช้คำนวณค่าแรงในรายงานกำไร-ขาดทุน)<span class="r">เห็นเฉพาะผู้จัดการ</span></h3>
    ${shiftsOK()?`<div class="tbl"><table><tr><th>ชื่อ</th><th>ประเภท</th><th>รูปแบบค่าจ้าง</th><th class="n" style="width:140px">อัตรา (บาท)</th><th class="n" style="width:110px">OT (เท่า)</th></tr>
    ${S.users.map(u=>{const p=PR()[u.id]||{};return `<tr><td><b>${esc(u.name)}</b></td><td>${u.role==='owner'?'เจ้าของ':u.empType==='extra'?'Extra':'ประจำ'}</td><td><select class="prT" data-u="${u.id}"><option value="">— ไม่คิดค่าแรง —</option>${[['monthly','เงินเดือน / เดือน'],['daily','รายวัน / วัน'],['hourly','รายชั่วโมง / ชม.']].map(([k,n])=>`<option value="${k}" ${p.type===k?'selected':''}>${n}</option>`).join('')}</select></td><td><input type="number" min="0" class="prR" data-u="${u.id}" value="${p.rate||''}" style="text-align:right"></td><td><input type="number" min="1" step="0.25" class="prO" data-u="${u.id}" value="${p.otx||1.5}" style="text-align:right"></td></tr>`}).join('')}</table></div>
@@ -847,6 +848,7 @@ function useHere(){const old=G().sim;G().sim='off';getPos().then(p=>{G().sim=old
 function saveGeo(){const g=G(),la=val('gLat'),ln=val('gLng');
   if((la&&!ln)||(!la&&ln)||(la&&(Math.abs(+la)>90||Math.abs(+ln)>180)))return toast('พิกัดไม่ถูกต้อง');
   g.lat=la?+la:null;g.lng=ln?+ln:null;g.radius=Math.max(20,+val('gRad')||100);g.maxAcc=Math.max(20,+val('gAcc')||150);g.policy=val('gPol');g.place=val('gPlace').trim()||'OHA ARTISAN BREAD';g.selfie=val('gSelf');g.sim=LIVE?'off':val('gSim');save();toast('บันทึกตำแหน่งร้านแล้ว');rerender()}
+AFTER.staff=()=>{if(LIVE&&SERVER_V>=7&&isAdmin()&&!ui.aiStat)api('aiStatus').then(r=>{ui.aiStat=r;if(route==='staff'&&!modalOpen())rerender()}).catch(()=>{})};
 function savePayroll(){const P={};document.querySelectorAll('.prT').forEach(s=>{const u=s.dataset.u,r=+document.querySelector(`.prR[data-u="${u}"]`).value||0,o=+document.querySelector(`.prO[data-u="${u}"]`).value||1.5;if(s.value&&r>0)P[u]={type:s.value,rate:r,otx:o}});S.payroll=P;save();toast('บันทึกค่าจ้างแล้ว')}
 function saveSettings(){const st=S.settings;st.graceMin=Math.max(0,+val('stG')||0);const N=[...document.querySelectorAll('.tpN')],A=[...document.querySelectorAll('.tpS')],B=[...document.querySelectorAll('.tpE')],K=[...document.querySelectorAll('.tpB')];st.shiftTpl.forEach((t,i)=>{t.name=N[i].value.trim()||t.name;t.start=A[i].value||t.start;t.end=B[i].value||t.end;t.brk=Math.max(0,+K[i].value||0)});document.querySelectorAll('.q').forEach(q=>st.quota[q.dataset.k]=+q.value||0);save();toast('บันทึกการตั้งค่าแล้ว')}
 let PINS={},ME_ADMIN=false;
@@ -998,7 +1000,7 @@ function prodDay(){const d=ui.pdate||today(),own=isOwner(),rows=sheet(d),closed=
   const best=rows.filter(r=>r.sale+r.whs>0).sort((a,b)=>(b.sale+b.whs)-(a.sale+a.whs));
   return `<div class="row mb"><input type="date" value="${d}" style="width:auto" onchange="ui.pdate=this.value;rerender()">
     ${closed?`<span class="pill good">✓ ปิดยอดแล้ว · ${esc(U(closed.by).name)} ${hm(closed.at)}</span>`:'<span class="pill warn">ยังไม่ปิดยอด</span>'}<span class="sp"></span>
-    <button class="btn" onclick="morningForm('${d}')">ผลิตรอบเช้า</button><button class="btn" onclick="recvForm('${d}')">📦 รับสินค้ามาขาย</button><button class="btn" onclick="moveForm('${d}',null,'add')">+ ทำเพิ่ม</button><button class="btn" onclick="moveForm('${d}',null,'promo')">+ เบิกโปรโมท</button><button class="btn p" onclick="closeDayForm('${d}')">${closed?'แก้ไขการปิดยอด':'ปิดยอด (นับของเหลือ)'}</button></div>
+    <button class="btn" onclick="morningForm('${d}')">ผลิตรอบเช้า</button><button class="btn" onclick="recvForm('${d}')">📦 รับสินค้ามาขาย</button>${own?`<button class="btn" onclick="scanBill('supplier_invoice')">📷 สแกนบิลรับของ</button>`:''}<button class="btn" onclick="moveForm('${d}',null,'add')">+ ทำเพิ่ม</button><button class="btn" onclick="moveForm('${d}',null,'promo')">+ เบิกโปรโมท</button><button class="btn p" onclick="closeDayForm('${d}')">${closed?'แก้ไขการปิดยอด':'ปิดยอด (นับของเหลือ)'}</button></div>
   <div class="grid g4 mb">
     <div class="card kpi"><div class="lb">ผลิตวันนี้ (เช้า + ทำเพิ่ม)</div><div class="v">${num(T('prod')+T('add'))} <small>ชิ้น</small></div><div class="d">ทำเพิ่มระหว่างวัน ${num(T('add'))} · ยกมา ${num(T('carry'))}${T('recv')?' · รับมาขาย '+num(T('recv')):''}</div></div>
     <div class="card kpi"><div class="lb">ขายออก (หน้าร้าน + ส่ง)</div><div class="v">${num(T('sale')+T('whs'))} <small>ชิ้น</small></div><div class="d">หน้าร้าน ${num(T('sale'))} · ขายส่ง ${num(T('whs'))}${own?' · ฿'+money(frontRev):''}</div></div>
@@ -1118,7 +1120,7 @@ function custStats(c){const os=S.worders.filter(o=>o.custId===c.id&&o.status!=='
   const unpaid=del.filter(o=>!o.paid);return {n:os.length,value:del.reduce((a,o)=>a+oTotal(o),0),unpaid:unpaid.reduce((a,o)=>a+oTotal(o),0),overdue:unpaid.filter(o=>dueOf(o)<today()).reduce((a,o)=>a+oTotal(o),0),
     last:os.map(o=>o.deliverDate).filter(d=>d<=today()).sort().pop(),next:os.filter(o=>o.status==='pending'||o.status==='prepared').map(o=>o.deliverDate).sort()[0]}}
 VIEWS.wholesale=()=>{const tab=ui.wtab||'schedule';
-  return head('ลูกค้าขายส่ง','ร้านค้า คาเฟ่ โรงแรม — กำหนดส่ง ประวัติ และการชำระเงิน',`<button class="btn" onclick="editCust()">+ เพิ่มลูกค้า</button><button class="btn p" onclick="orderForm()">+ ออเดอร์ใหม่</button>`)+
+  return head('ลูกค้าขายส่ง','ร้านค้า คาเฟ่ โรงแรม — กำหนดส่ง ประวัติ และการชำระเงิน',`${isOwner()?`<button class="btn" onclick="scanBill('transfer_slip')">📷 สแกนสลิปรับเงิน</button>`:''}<button class="btn" onclick="editCust()">+ เพิ่มลูกค้า</button><button class="btn p" onclick="orderForm()">+ ออเดอร์ใหม่</button>`)+
   `<div class="row mb"><div class="tabs">${[['schedule','ตารางส่ง'],['orders','ออเดอร์ทั้งหมด'],['customers','รายชื่อลูกค้า']].map(([k,n])=>`<button class="${tab===k?'on':''}" onclick="ui.wtab='${k}';rerender()">${n}</button>`).join('')}</div></div>`+
   ({schedule:wSchedule,orders:wOrders,customers:wCustomers}[tab])();
 };
@@ -1315,7 +1317,7 @@ VIEWS.dsum=()=>{const own=isOwner(),t=today(),d=own?(ui.dsDate||t):t,s=S.sales.f
   if(!dsumOK())return head('สรุปยอดขายประจำวัน','')+'<div class="note" style="background:var(--warn-l)">⚠ ต้องอัปเดตโค้ด Apps Script (Code.gs) และ Deploy เวอร์ชันใหม่ก่อน พนักงานจึงจะลงสรุปยอดขายได้ — แจ้งอ๊อฟ</div>';
   const it=dsItemsTotal(D),pt=dsPayTotal(D);
   return head('สรุปยอดขายประจำวัน',own?'กรอกยอดขายรายสินค้าตอนปิดร้าน หรือนำเข้าไฟล์จากเครื่อง POS':'กรอกตอนปิดร้าน: ขายอะไรไปกี่ชิ้น และยอดเงินแต่ละช่องทาง',
-    `<button class="btn" onclick="importPOS()">📥 นำเข้าไฟล์จาก POS</button>`)+`
+    `<button class="btn" onclick="scanBill('pos_summary')">📷 สแกนใบสรุปยอด</button><button class="btn" onclick="importPOS()">📥 นำเข้าไฟล์จาก POS</button>`)+`
   <div class="row mb">${own?`<input type="date" value="${d}" style="width:auto" onchange="ui.dsDate=this.value;rerender()">`:`<b>${thDay(d)}</b>`}
    ${s?`<span class="pill good">✓ บันทึกแล้ว${s.by?' · '+esc(U(s.by).name):''}${s.at?' '+hm(s.at):''}${s.src==='pos'?' · จากไฟล์ POS':''}</span>`:'<span class="pill warn">ยังไม่ได้ลงยอด</span>'}
    ${ui.dsDraft&&ui.dsDraft.dirty?'<span class="pill terra">มีการแก้ไขที่ยังไม่บันทึก</span>':''}</div>
@@ -1587,9 +1589,71 @@ function rvRows(){const el=document.getElementById('rvRows');if(!el)return;const
 function rvTot(){const t=_rv.reduce((a,x)=>a+(+x.qty||0)*(+x.cost||0),0),e=document.getElementById('rvT');if(e)e.textContent=t?'ทุนรวม ฿'+money(t):''}
 function newBuyGood(){const box=document.getElementById('rvNew');box.innerHTML=`<div class="note mb"><div style="font-weight:500;margin-bottom:6px">สินค้าใหม่ (ซื้อมาขาย)</div><div class="grid" style="grid-template-columns:1.5fr 1fr 1fr 1fr;gap:6px"><input id="nbN" placeholder="ชื่อสินค้า"><input id="nbP" type="number" placeholder="ราคาขาย"><input id="nbC" type="number" step="any" placeholder="ทุน/ชิ้น"><input id="nbU" value="ชิ้น" placeholder="หน่วย"></div>
   <div class="row" style="margin-top:6px"><label style="display:flex;gap:6px;font-size:13px"><input type="checkbox" id="nbK" style="width:auto"> ขายต่อวันถัดไปได้ (เช่น ซอสบรรจุขวด)</label><span class="sp"></span><button class="btn sm p" id="nbOk">เพิ่มสินค้า</button></div></div>`;
+  const um=_rv.find(x=>!x.gid&&x._n);if(um){document.getElementById('nbN').value=um._n;document.getElementById('nbC').value=um.cost||''}
   document.getElementById('nbOk').onclick=()=>{const n=val('nbN').trim();if(!n)return toast('ใส่ชื่อสินค้า');if(S.goods.some(g=>g.name===n))return toast('มีสินค้าชื่อนี้แล้ว');
     const g={id:uid(),name:n,cat:'ซื้อมาขาย',price:+val('nbP')||0,cost:+val('nbC')||0,unit:val('nbU').trim()||'ชิ้น',carry:document.getElementById('nbK').checked,par:0,active:true,src:'buy'};S.goods.push(g);syncProducts();
-    const empty=_rv.find(x=>!x.gid);if(empty){empty.gid=g.id;empty.cost=g.cost}else _rv.push({gid:g.id,qty:'',cost:g.cost});box.innerHTML='';rvRows();toast('เพิ่มสินค้า '+n)}}
+    const empty=_rv.find(x=>!x.gid&&x._n===n)||_rv.find(x=>!x.gid);if(empty){empty.gid=g.id;empty.cost=empty.cost||g.cost}else _rv.push({gid:g.id,qty:'',cost:g.cost});box.innerHTML='';rvRows();toast('เพิ่มสินค้า '+n)}}
+
+/* ================= SCAN BILL (AI อ่านบิลด้วย Gemini) ================= */
+const SCAN_T={expense_receipt:['ใบเสร็จ / รายจ่าย','🧾'],supplier_invoice:['บิลรับสินค้ามาขาย','📦'],transfer_slip:['สลิปโอนเงิน','💸'],pos_summary:['ใบสรุปยอด POS','🖨'],unknown:['ไม่แน่ใจประเภท','❓']};
+let _scan=null;
+function scanBill(hint){if(!LIVE)return modal(`<h2>📷 สแกนบิลด้วย AI</h2><p style="line-height:1.7;margin-bottom:14px">ฟีเจอร์นี้ใช้ได้ในระบบจริง (natty-aof.github.io/oha-artisan-bread) เพราะต้องให้เซิร์ฟเวอร์ของร้านส่งรูปไปให้ Gemini อ่าน — หน้าพรีวิวนี้ไม่ได้เชื่อมเซิร์ฟเวอร์</p><div class="row end"><button class="btn" onclick="closeModal()">ปิด</button></div>`,440);
+  if(SERVER_V<7)return modal(`<h2>📷 สแกนบิลด้วย AI</h2><p style="line-height:1.7;margin-bottom:14px">ต้องอัปเดตโค้ด Apps Script (Code.gs) เป็นเวอร์ชันล่าสุด และ Deploy เวอร์ชันใหม่ก่อน — แจ้งอ๊อฟ</p><div class="row end"><button class="btn" onclick="closeModal()">ปิด</button></div>`,440);
+  modal(`<h2>📷 สแกนบิลด้วย AI</h2><p style="font-size:14px;color:var(--ink2);line-height:1.7;margin-bottom:12px">ถ่ายรูปให้เห็นทั้งใบ ชัด ไม่เอียง — ระบบจะอ่านแล้วกรอกฟอร์มให้ <b>คุณตรวจก่อนบันทึกทุกครั้ง</b></p>
+  <label class="f"><span>ประเภทเอกสาร</span><select id="scH"><option value="auto">ให้ AI ดูเอง</option>${Object.entries(SCAN_T).filter(([k])=>k!=='unknown').map(([k,[n]])=>`<option value="${k}" ${hint===k?'selected':''}>${n}</option>`).join('')}</select></label>
+  <label class="btn p" style="cursor:pointer;width:100%;padding:16px;font-size:16px">📷 ถ่ายรูป / เลือกรูปบิล<input type="file" accept="image/*" capture="environment" style="display:none" onchange="doScan(this.files[0])"></label>
+  <div class="row end" style="margin-top:12px"><button class="btn" onclick="closeModal()">ยกเลิก</button></div>`,460)}
+function imgToData(file,max,q){return new Promise((res,rej)=>{const rd=new FileReader();rd.onload=()=>{const im=new Image();im.onload=()=>{const s=Math.min(1,max/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*s);c.height=Math.round(im.height*s);c.getContext('2d').drawImage(im,0,0,c.width,c.height);res(c.toDataURL('image/jpeg',q))};im.onerror=()=>rej(new Error('เปิดรูปไม่ได้'));im.src=rd.result};rd.readAsDataURL(file)})}
+async function doScan(file){if(!file)return;const hint=val('scH');
+  modal(`<div style="text-align:center;padding:26px 0"><div class="spin"></div><h2 style="margin:14px 0 4px">AI กำลังอ่านบิล…</h2><p style="color:var(--muted);font-size:14px">ประมาณ 5–20 วินาที</p></div>`,400);
+  try{const big=await imgToData(file,1600,.8);const thumb=await new Promise(r=>shrinkTo(file,30000,r));
+    const res=await api('scan',{image:big,hint,goods:GA().map(g=>g.name),cats:EXP_CATS});_scan={d:res.data||{},img:thumb};scanReview()}
+  catch(e){modal(`<h2 style="color:var(--bad)">อ่านบิลไม่สำเร็จ</h2><p style="line-height:1.7;margin-bottom:14px">${esc(e.message)}</p><div class="row end"><button class="btn" onclick="closeModal()">ปิด</button><button class="btn p" onclick="scanBill('${hint}')">ลองใหม่</button></div>`,440)}}
+function scanReview(){const d=_scan.d,t=SCAN_T[d.type]||SCAN_T.unknown,items=d.items||[],own=isOwner();
+  modal(`<div class="row" style="gap:12px;align-items:flex-start"><img src="${_scan.img}" onclick="viewPhoto(this.src)" style="width:84px;height:84px;object-fit:cover;border-radius:10px;cursor:zoom-in;flex:none">
+   <div class="sp"><div style="font-size:13px;color:var(--muted)">AI อ่านได้ว่าเป็น</div><h2 style="margin:2px 0">${t[1]} ${t[0]}</h2><div style="font-size:13.5px;color:var(--ink2)">${d.vendor?esc(d.vendor)+' · ':''}${d.date?thDate(d.date):''}${d.time?' '+esc(d.time):''}${+d.total?` · <b>฿${money(d.total)}</b>`:''}${d.confidence!=null?` · ความมั่นใจ ${Math.round((+d.confidence||0)*100)}%`:''}</div></div></div>
+  ${items.length?`<div style="max-height:34vh;overflow:auto;margin-top:12px;border:1px solid var(--line);border-radius:10px"><table><tr><th>รายการ</th><th class="n">จำนวน</th><th class="n">ราคา/หน่วย</th><th class="n">รวม</th></tr>${items.map(i=>`<tr><td>${esc(i.name)}${i.match?` <span class="pill olive">${esc(i.match)}</span>`:''}</td><td class="n">${num(i.qty,2)} ${esc(i.unit||'')}</td><td class="n">${money(i.unit_price)}</td><td class="n">${money(i.amount)}</td></tr>`).join('')}</table></div>`:''}
+  ${d.type==='transfer_slip'&&d.slip?`<div class="note" style="margin-top:10px">โอน ฿${money(d.slip.amount||d.total)} · จาก ${esc(d.slip.from_name||'-')} → ${esc(d.slip.to_name||'-')}${d.slip.bank?' · '+esc(d.slip.bank):''}${d.slip.ref?' · Ref '+esc(d.slip.ref):''}</div>`:''}
+  ${d.notes?`<div class="hint">หมายเหตุจาก AI: ${esc(d.notes)}</div>`:''}
+  <div style="font-size:13px;color:var(--ink2);margin:14px 0 6px">บันทึกเป็น:</div>
+  <div class="grid g2" style="gap:8px">
+   <button class="btn ${d.type==='expense_receipt'||d.type==='unknown'?'p':''}" onclick="scanTo('expense')">🧾 รายจ่าย</button>
+   ${own?`<button class="btn ${d.type==='supplier_invoice'?'p':''}" onclick="scanTo('recv')">📦 รับสินค้ามาขาย</button>`:''}
+   <button class="btn ${d.type==='pos_summary'?'p':''}" onclick="scanTo('pos')">🖨 สรุปยอดขายประจำวัน</button>
+   ${own?`<button class="btn ${d.type==='transfer_slip'?'p':''}" onclick="scanTo('payment')">💸 รับชำระจากลูกค้าส่ง</button>`:''}
+  </div><div class="row end" style="margin-top:12px"><button class="btn g" onclick="closeModal()">ยกเลิก</button></div>`,600)}
+const d10=s=>/^\d{4}-\d{2}-\d{2}$/.test(s||'')?s:today();
+function scanTo(kind){const d=_scan.d,items=d.items||[];
+  if(kind==='expense'){const cat=EXP_CATS.includes(d.category)?d.category:'เบ็ดเตล็ด',amt=+d.total||+(d.slip||{}).amount||items.reduce((a,i)=>a+(+i.amount||0),0);
+    const desc=(d.description||'')||((d.vendor?d.vendor+': ':'')+items.slice(0,4).map(i=>i.name).join(', '))||'รายจ่ายจากบิล';
+    expForm();setTimeout(()=>{const set=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v};set('xD',d10(d.date));set('xA',amt||'');set('xT',desc.slice(0,120));set('xC',cat);set('xN',[d.vendor,d.slip&&d.slip.ref?'Ref '+d.slip.ref:''].filter(Boolean).join(' · '));
+      if(d.payment==='transfer'||d.type==='transfer_slip'){const r=document.querySelector('input[name=xS][value=shop_bank]');if(r&&isOwner())r.checked=true}
+      window._rc=_scan.img;const p=document.getElementById('xRP');if(p)p.innerHTML=photoTag(_scan.img,56);toast('กรอกจากบิลแล้ว — ตรวจแล้วกดบันทึก')},30);return}
+  if(kind==='recv'){recvForm(d10(d.date));setTimeout(()=>{document.getElementById('rvF').value=d.vendor||'';
+      _rv=items.filter(i=>+i.qty>0).map(i=>{const g=i.match?S.goods.find(x=>x.name===i.match):null,gid=g?g.id:autoMatch(i.name);return {gid:gid&&gid!=='-'?gid:'',qty:+i.qty,cost:+i.unit_price||(+i.amount&&+i.qty?+i.amount/ +i.qty:''),_n:i.name}});
+      if(!_rv.length)_rv=[{gid:'',qty:'',cost:''}];rvRows();const miss=_rv.filter(x=>!x.gid&&x._n);
+      if(miss.length)document.getElementById('rvNew').innerHTML=`<div class="note mb" style="background:var(--warn-l)">ยังจับคู่ไม่ได้: ${miss.map(x=>esc(x._n)+' ×'+x.qty).join(', ')} — เลือกสินค้าเอง หรือกด “+ สินค้าใหม่”</div>`;
+      toast('กรอกจากบิลแล้ว — ตรวจแล้วกดบันทึก')},30);return}
+  if(kind==='pos'){const dd=isOwner()?d10(d.date):today();if(!isOwner()&&d.date&&d.date!==today())toast('พนักงานลงได้เฉพาะยอดวันนี้ — ใช้วันที่วันนี้');
+    ui.dsDate=dd;ui.dsDraft=null;const D=dsDraftFor(dd);D.qty={};D.amt={};D.others=[];D.src='pos';D.dirty=1;
+    items.forEach(i=>{const g=i.match?S.goods.find(x=>x.name===i.match):null,gid=g?g.id:autoMatch(i.name);if(gid==='-')return;
+      if(gid){D.qty[gid]=(+D.qty[gid]||0)+(+i.qty||0);if(+i.amount)D.amt[gid]=(+D.amt[gid]||0)+ +i.amount}else D.others.push({name:i.name,qty:+i.qty||'',amount:+i.amount||''})});
+    const P=d.pos||{};['cash','transfer','card','delivery'].forEach(k=>{if(+P[k])D.pay[k]=+P[k]});if(+P.bills)D.bills=+P.bills;
+    closeModal();if(route!=='dsum')go('dsum');else rerender();toast('กรอกจากใบสรุปยอดแล้ว — ตรวจแล้วกดบันทึก');return}
+  if(kind==='payment'){const amt=+(d.slip||{}).amount||+d.total,un=S.worders.filter(o=>o.status==='delivered'&&!o.paid).sort((a,b)=>Math.abs(oTotal(a)-amt)-Math.abs(oTotal(b)-amt));
+    const nm=normN((d.slip||{}).from_name||'');
+    modal(`<h2>💸 รับชำระจากลูกค้าส่ง</h2><p style="margin-bottom:10px">ยอดในสลิป <b class="en">฿${money(amt)}</b>${d.slip&&d.slip.from_name?' จาก '+esc(d.slip.from_name):''} · ${d.date?thDate(d.date):''}</p>
+    <div class="hint" style="margin-bottom:6px">ติ๊กออเดอร์ที่สลิปนี้จ่าย (เรียงตามยอดที่ใกล้เคียงที่สุด)</div>
+    <div style="max-height:44vh;overflow:auto">${un.map(o=>{const c=WC(o.custId),hit=Math.abs(oTotal(o)-amt)<1||(nm&&normN(c.name).includes(nm.slice(0,6)));return `<label class="list-item" style="cursor:pointer;${hit?'background:var(--good-l);border-radius:8px;padding-left:6px':''}"><input type="checkbox" class="payO" value="${o.id}" ${Math.abs(oTotal(o)-amt)<1?'checked':''} style="width:auto"><div class="sp"><div class="t">${esc(c.name)}</div><div class="s">${o.no} · ส่ง ${thDate(o.deliverDate)}</div></div><b class="en">฿${money(oTotal(o))}</b></label>`}).join('')||'<div class="empty">ไม่มียอดค้างชำระ</div>'}</div>
+    <div class="row end" style="margin-top:12px"><button class="btn" onclick="scanReview()">ย้อนกลับ</button><button class="btn p" id="payOk">บันทึกรับชำระ</button></div>`,560);
+    document.getElementById('payOk').onclick=()=>{const ids=[...document.querySelectorAll('.payO:checked')].map(x=>x.value);if(!ids.length)return toast('เลือกออเดอร์');
+      const at=(d10(d.date))+'T12:00:00.000Z';ids.forEach(id=>{const o=S.worders.find(x=>x.id===id);o.paid=true;o.paidAt=new Date().toISOString();o.payRef=((d.slip||{}).ref||'')+' (สลิป '+(d.date||'')+')'});
+      const tot=S.worders.filter(o=>ids.includes(o.id)).reduce((a,o)=>a+oTotal(o),0);save();closeModal();toast(`บันทึกรับชำระ ${ids.length} ออเดอร์ ฿${money(tot)}${Math.abs(tot-amt)>=1?' (ไม่ตรงสลิป ฿'+money(amt)+')':''}`);rerender()}}}
+function aiKeyForm(){modal(`<h2>🤖 ตั้งค่า AI อ่านบิล (Gemini)</h2><ol style="padding-left:20px;line-height:1.9;font-size:14px;margin-bottom:12px"><li>เปิด <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--terra)">aistudio.google.com/apikey</a> ด้วยบัญชี Google ของร้าน</li><li>กด <b>Create API key</b> แล้วคัดลอก</li><li>วางในช่องด้านล่าง แล้วกดบันทึก (ระบบจะทดสอบ key ให้)</li></ol>
+  <label class="f"><span>Gemini API key</span><input id="aiK" type="password" placeholder="AIza..." autocomplete="off"></label>
+  <div class="hint" style="margin-bottom:12px">key ถูกเก็บในเซิร์ฟเวอร์ Apps Script ของร้านเท่านั้น ไม่แสดงในหน้าเว็บ · เว้นว่างแล้วบันทึก = ยกเลิกการใช้ AI</div>
+  <div class="row end"><button class="btn" onclick="closeModal()">ยกเลิก</button><button class="btn p" id="aiOk">บันทึก</button></div>`,500);
+  document.getElementById('aiOk').onclick=async()=>{const b=document.getElementById('aiOk');b.disabled=true;b.textContent='กำลังทดสอบ…';try{const r=await api('setAiKey',{key:val('aiK')});closeModal();toast(r.configured?'เชื่อมต่อ Gemini สำเร็จ ('+r.model+')':'ยกเลิกการใช้ AI แล้ว');ui.aiStat=r;rerender()}catch(e){b.disabled=false;b.textContent='บันทึก';toast(e.message)}}}
 
 /* ================= EXPENSES (รายจ่ายประจำวัน) ================= */
 const EXP_CATS=['วัตถุดิบ','บรรจุภัณฑ์','สินค้าซื้อมาขาย','ค่าขนส่ง / น้ำมัน','ค่าน้ำ / ไฟ / แก๊ส','ค่าเช่า','อุปกรณ์ / ซ่อมบำรุง','การตลาด / โปรโมท','ค่าแรง / OT','เบ็ดเตล็ด'];
@@ -1618,7 +1682,7 @@ VIEWS.expenses=()=>{const own=isOwner(),t=today(),mo=ui.emo||t.slice(0,7),f=ui.e
   const mAll=all.filter(e=>e.date.startsWith(mo)),sum=a=>a.reduce((s,e)=>s+ +e.amount,0);
   const catSum={};mAll.forEach(e=>catSum[e.cat]=(catSum[e.cat]||0)+ +e.amount);const cmax=Math.max(1,...Object.values(catSum));
   const salesM=own?SL().filter(s=>s.date.startsWith(mo)).reduce((a,s)=>a+saleTotal(s),0):0;
-  return head('รายจ่ายประจำวัน',own?'ใครจ่ายค่าอะไร · เงินส่วนตัวหรือเงินร้าน · เบิกคืนแล้วหรือยัง':'บันทึกค่าใช้จ่ายที่จ่ายไป เพื่อเบิกคืน',expOK()?`<button class="btn p" onclick="expForm()">+ บันทึกรายจ่าย</button>`:'')+
+  return head('รายจ่ายประจำวัน',own?'ใครจ่ายค่าอะไร · เงินส่วนตัวหรือเงินร้าน · เบิกคืนแล้วหรือยัง':'บันทึกค่าใช้จ่ายที่จ่ายไป เพื่อเบิกคืน',expOK()?`<button class="btn" onclick="scanBill('expense_receipt')">📷 สแกนบิล</button><button class="btn p" onclick="expForm()">+ บันทึกรายจ่าย</button>`:'')+
   (expOK()?'':`<div class="note mb" style="background:var(--warn-l)">⚠ ต้องอัปเดตโค้ด Apps Script (Code.gs) และ Deploy เวอร์ชันใหม่ก่อน จึงจะบันทึกรายจ่ายได้ — แจ้งอ๊อฟ</div>`)+
   `<div class="grid g4 mb">
     <div class="card kpi"><div class="lb">รายจ่ายวันนี้</div><div class="v">฿${money(sum(all.filter(e=>e.date===t)))}</div><div class="d">${all.filter(e=>e.date===t).length} รายการ</div></div>

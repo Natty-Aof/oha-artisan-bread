@@ -16,7 +16,8 @@
 
 const TZ = 'Asia/Bangkok';
 const COLLS = ['users','items','moves','sales','attendance','ot','leaves','reports','goods','pmoves','wcust','worders','members','memberTx','expenses','bills','shifts'];
-const API_VERSION = 6;
+const API_VERSION = 7;
+const GEMINI_MODELS = ['gemini-flash-latest', 'gemini-3.5-flash', 'gemini-2.5-flash'];  // ลองตามลำดับ
 const OWNER_WRITE = ['users','shifts'];                    // พนักงานแก้ไม่ได้
 const STAFF_HIDDEN = [];                          // (ยอดขาย: พนักงานเห็นเฉพาะของวันนี้ — ดู canSee_)
 const STAFF_DELETE = ['leaves','ot','pmoves','expenses'];    // พนักงานลบได้ (ยกเลิกคำขอ / ลบบันทึกของตัวเอง)
@@ -206,6 +207,34 @@ const ACTIONS = {
     return { pins: m };
   },
 
+  /* สถานะ AI อ่านบิล */
+  aiStatus(b) {
+    auth_(b.token);
+    const p = PropertiesService.getScriptProperties();
+    return { configured: !!p.getProperty('GEMINI_KEY'), model: p.getProperty('GEMINI_MODEL') || '' };
+  },
+  /* ตั้ง Gemini API key — เฉพาะ ADMIN (key ไม่ถูกส่งกลับไปที่หน้าเว็บ) */
+  setAiKey(b) {
+    const user = auth_(b.token);
+    if (user.id !== ADMIN_UID) throw new Error('เฉพาะอ๊อฟเท่านั้นที่ตั้งค่า AI ได้');
+    const key = String(b.key || '').trim(), p = PropertiesService.getScriptProperties();
+    if (!key) { p.deleteProperty('GEMINI_KEY'); return { configured: false }; }
+    const r = geminiCall_(key, [{ text: 'ตอบคำว่า OK เป็น JSON {"ok":true}' }]);   // ทดสอบ key
+    p.setProperty('GEMINI_KEY', key); p.setProperty('GEMINI_MODEL', r.model);
+    return { configured: true, model: r.model };
+  },
+  /* อ่านรูปบิล/ใบเสร็จ/สลิป/ใบสรุปยอด POS → JSON */
+  scan(b) {
+    auth_(b.token);
+    const p = PropertiesService.getScriptProperties(), key = p.getProperty('GEMINI_KEY');
+    if (!key) throw new Error('ยังไม่ได้ตั้งค่า AI อ่านบิล — ให้อ๊อฟใส่ Gemini API key ที่ “พนักงาน & ตั้งค่า”');
+    const m = String(b.image || '').match(/^data:(.+?);base64,(.*)$/);
+    if (!m) throw new Error('ไม่พบรูป');
+    const r = geminiCall_(key, [{ text: scanPrompt_(b) }, { inline_data: { mime_type: m[1], data: m[2] } }], p.getProperty('GEMINI_MODEL'));
+    if (r.model !== p.getProperty('GEMINI_MODEL')) p.setProperty('GEMINI_MODEL', r.model);
+    return { data: r.data };
+  },
+
   photo(b) {
     const user = auth_(b.token);
     const f = DriveApp.getFileById(String(b.id || ''));
@@ -214,6 +243,50 @@ const ACTIONS = {
     return { dataUrl: 'data:' + blob.getContentType() + ';base64,' + Utilities.base64Encode(blob.getBytes()) };
   }
 };
+
+/* ===================== AI อ่านบิล (Gemini) ===================== */
+function geminiCall_(key, parts, prefer) {
+  const models = (prefer ? [prefer] : []).concat(GEMINI_MODELS.filter(x => x !== prefer));
+  let last = '';
+  for (const model of models) {
+    const res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': key },
+      payload: JSON.stringify({ contents: [{ role: 'user', parts: parts }], generationConfig: { responseMimeType: 'application/json', temperature: 0.1 } })
+    });
+    const code = res.getResponseCode(), txt = res.getContentText();
+    if (code === 404) { last = model + ' ไม่พบ'; continue; }
+    if (code !== 200) {
+      let msg = txt; try { msg = JSON.parse(txt).error.message; } catch (e) {}
+      if (code === 400 && /API key/i.test(msg)) throw new Error('Gemini API key ไม่ถูกต้อง');
+      if (code === 429) throw new Error('ใช้ AI อ่านบิลถี่เกินโควตาฟรี — รอสักครู่แล้วลองใหม่');
+      throw new Error('Gemini ตอบกลับผิดพลาด (' + code + '): ' + String(msg).slice(0, 200));
+    }
+    const j = JSON.parse(txt), c = (j.candidates || [])[0];
+    const out = c && c.content && c.content.parts ? c.content.parts.map(x => x.text || '').join('') : '';
+    let data; try { data = JSON.parse(out.replace(/^```(json)?|```$/g, '').trim()); } catch (e) { throw new Error('AI อ่านบิลไม่สำเร็จ — ลองถ่ายให้ชัดขึ้น'); }
+    return { model, data };
+  }
+  throw new Error('ไม่พบโมเดล Gemini ที่ใช้ได้ (' + last + ')');
+}
+function scanPrompt_(b) {
+  const goods = (b.goods || []).slice(0, 80).join(' | '), cats = (b.cats || []).join(' | ');
+  const today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+  return [
+    'You read a photo of a Thai document for a bakery called OHA ARTISAN BREAD and return ONLY JSON.',
+    'Today is ' + today + '. Convert Buddhist years (e.g. 2569) to Gregorian (2026). Dates as YYYY-MM-DD. Numbers as plain numbers (no commas).',
+    'Hint from user: ' + (b.hint || 'auto') + '.',
+    'Classify "type" as one of: "expense_receipt" (receipt/invoice for things the bakery bought or paid: ingredients, packaging, gas, repairs...),',
+    '"supplier_invoice" (delivery note/bill of finished products bought to resell), "transfer_slip" (bank/PromptPay transfer slip), "pos_summary" (end-of-day POS sales summary/report), or "unknown".',
+    'Our menu products: ' + goods + '. Expense categories: ' + cats + '.',
+    'JSON shape: {"type":"","confidence":0-1,"date":"","time":"","vendor":"","total":0,"payment":"cash|transfer|card|unknown",',
+    '"category":"(one of the expense categories)","description":"short Thai summary",',
+    '"items":[{"name":"as printed","match":"exact menu product name if it is one of our menu products, else empty","qty":0,"unit":"","unit_price":0,"amount":0}],',
+    '"slip":{"amount":0,"from_name":"","to_name":"","bank":"","ref":""},',
+    '"pos":{"bills":0,"cash":0,"transfer":0,"card":0,"delivery":0,"other":0,"discount":0},',
+    '"notes":"anything unclear"}',
+    'Use 0 or "" when unknown. Never invent items that are not visible.'
+  ].join('\n');
+}
 
 /* ===================== รายจ่าย ===================== */
 /** พนักงานเห็นเฉพาะรายจ่ายที่ตัวเองจ่าย/บันทึก */
