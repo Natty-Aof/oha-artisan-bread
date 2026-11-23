@@ -130,6 +130,10 @@ table.pnl td,table.pnl th{padding:7px 8px;font-size:13px}table.pnl tr.sum td{bor
 .tabs{display:inline-flex;background:var(--plaster);border-radius:10px;padding:3px;gap:2px}
 .tabs button{border:0;background:transparent;padding:6px 14px;border-radius:8px;cursor:pointer;font-weight:500;font-size:14px;color:var(--ink2)}
 .tabs button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.mn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px}.mn-card{padding:0;overflow:hidden;display:flex;flex-direction:column}.mn-card.off .mn-img img{filter:grayscale(.8);opacity:.6}
+.mn-img{position:relative;aspect-ratio:4/3;background:var(--plaster);cursor:pointer}.mn-img img{width:100%;height:100%;object-fit:cover;display:block}.mn-ph{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--muted);font-size:14px;text-align:center}.mn-tag{position:absolute;top:10px;left:10px}
+.mn-body{padding:14px 16px 16px;flex:1;display:flex;flex-direction:column}.mn-price{color:var(--terra-d);white-space:nowrap}
+@media(max-width:600px){.mn-grid{grid-template-columns:repeat(2,1fr);gap:10px}.mn-body{padding:10px 10px 12px;font-size:14px}.mn-img{aspect-ratio:1}}
 .empty{color:var(--muted);text-align:center;padding:26px 10px;font-size:14px}
 .list-item{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #EFEAE2}
 .list-item:last-child{border-bottom:0}
@@ -340,6 +344,7 @@ const I={
  receipt:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d="M5 3h14v18l-2.3-1.6L14.3 21 12 19.4 9.7 21l-2.4-1.6L5 21z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>',
  cart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d="M3 4h2l2.4 11h11.2L21 7H6.2"/><circle cx="9" cy="19.5" r="1.5"/><circle cx="17" cy="19.5" r="1.5"/></svg>',
  wallet:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H18v3"/><path d="M3 7.5V18a2 2 0 0 0 2 2h15V8H5.5A2.5 2.5 0 0 1 3 5.5"/><circle cx="16.5" cy="14" r="1.2" fill="currentColor"/></svg>',
+ menu:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>',
  bread:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M5 11a3.5 3.5 0 0 1-1-6.8C5 3.4 8 3 12 3s7 .4 8 1.2a3.5 3.5 0 0 1-1 6.8V20a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z"/><path d="M9 11v4M15 11v4"/></svg>',
  truck:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d="M2 6h12v10H2zM14 9h4l3 3.5V16h-7"/><circle cx="6" cy="17.5" r="2"/><circle cx="17" cy="17.5" r="2"/></svg>',
  member:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><circle cx="8.5" cy="11" r="2.2"/><path d="M5.5 16c.6-1.6 1.7-2.4 3-2.4s2.4.8 3 2.4M14 10h4.5M14 13.5h3"/></svg>',
@@ -355,6 +360,7 @@ const NAV=[
  {k:'stock',t:'สต็อกวัตถุดิบ',i:'stock'},
  {k:'report',t:'รายงานประจำวัน',i:'report'},
  {k:'production',t:'ผลิต & ขาย',i:'bread'},
+ {k:'menu',t:'เมนูสินค้า',i:'menu',own:1},
  {k:'wholesale',t:'ลูกค้าส่ง',i:'truck'},
  {k:'members',t:'สมาชิก',i:'member'},
  {k:'expenses',t:'รายจ่าย',i:'wallet'},
@@ -892,7 +898,7 @@ function syncProducts(){S.products=GA().map(g=>g.name)}
 function pendingWhs(date,gid){return S.worders.filter(o=>o.deliverDate===date&&(o.status==='pending'||o.status==='prepared')).reduce((a,o)=>a+o.items.filter(i=>i.gid===gid).reduce((s,i)=>s+ +i.qty,0),0)}
 function sheet(date,all){const rows={};S.goods.forEach(g=>rows[g.id]={g,carry:0,prod:0,add:0,recv:0,sale:0,whs:0,promo:0,waste:0});
   S.pmoves.forEach(m=>{if(m.date===date&&rows[m.gid])rows[m.gid][m.type]+= +m.qty});
-  return S.goods.filter(g=>all||g.active!==false).map(g=>{const r=rows[g.id];r.avail=r.carry+r.prod+r.add+r.recv;r.out=r.sale+r.whs+r.promo+r.waste;r.left=r.avail-r.out;r.pend=pendingWhs(date,g.id);return r})}
+  return S.goods.filter(g=>all||g.active!==false).map(g=>{const r=rows[g.id];r.avail=r.carry+r.prod+r.add+r.recv;r.out=r.sale+r.whs+r.promo+r.waste;r.left=r.avail-r.out;r.pend=pendingWhs(date,g.id);return r}).filter(r=>!(r.g.archived&&!r.avail&&!r.out))}
 function pmove(date,gid,type,qty,note,ref){S.pmoves.push({id:uid(),date,gid,type,qty:+qty,note:note||'',uid:ME?ME.id:'',at:new Date().toISOString(),ref:ref||''})}
 
 function defaultGoods(){return [['Country Sourdough','Sourdough',159,1,16,'ก้อน'],['Fig Sourdough','Sourdough',229,1,8,'ก้อน'],['Black Olive Sourdough','Sourdough',199,1,10,'ก้อน'],['Multigrain Sourdough','Sourdough',199,1,10,'ก้อน'],['Chocolate Chip Sourdough','Sourdough',189,1,10,'ก้อน'],
@@ -1094,22 +1100,53 @@ function prodAnalysis(){const n=ui.prange||14,a=analyze(n),L=a.list,max=Math.max
 }
 function prodGoods(){return `<div class="row mb"><span class="sp"></span><button class="btn" onclick="recvForm()">📦 รับสินค้ามาขาย</button><button class="btn p" onclick="editGood()">+ เพิ่มสินค้า</button></div>
   <div class="card"><div class="tbl"><table><tr><th>สินค้า</th><th>หมวด</th><th>ที่มา</th><th class="n">ราคาขาย</th><th class="n">ผลิตปกติ/วัน</th><th>ขายวันถัดไป</th><th>สถานะ</th><th></th></tr>
-  ${S.goods.map(g=>`<tr><td><div class="row" style="gap:10px;flex-wrap:nowrap">${thumb(g,44)}<b>${esc(g.name)}</b></div></td><td>${esc(g.cat)}</td><td>${isBuy(g)?'<span class="pill olive">ซื้อมาขาย</span>':'<span class="pill neu">ผลิตเอง</span>'}</td><td class="n">฿${g.price}</td><td class="n">${g.par} ${esc(g.unit)}</td><td>${g.carry?'ได้':'ไม่ได้'}</td><td>${g.active!==false?'<span class="pill good">ขายอยู่</span>':'<span class="pill neu">พักขาย</span>'}</td><td class="n"><button class="btn sm g" onclick="editGood('${g.id}')">แก้ไข</button></td></tr>`).join('')}</table></div></div>`}
-function loadGoodImg(inp){const f=inp.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{const im=new Image();im.onload=()=>{const c=document.createElement('canvas'),s=Math.min(im.width,im.height);c.width=c.height=112;
-  c.getContext('2d').drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,112,112);window._gimg=c.toDataURL('image/jpeg',0.75);document.getElementById('gImgP').innerHTML=`<img src="${window._gimg}" style="width:64px;height:64px;border-radius:10px;object-fit:cover">`};im.src=rd.result};rd.readAsDataURL(f)}
+  ${S.goods.filter(g=>!g.archived).map(g=>`<tr><td><div class="row" style="gap:10px;flex-wrap:nowrap">${thumb(g,44)}<b>${esc(g.name)}</b></div></td><td>${esc(g.cat)}</td><td>${isBuy(g)?'<span class="pill olive">ซื้อมาขาย</span>':'<span class="pill neu">ผลิตเอง</span>'}</td><td class="n">฿${g.price}</td><td class="n">${g.par} ${esc(g.unit)}</td><td>${g.carry?'ได้':'ไม่ได้'}</td><td>${g.active!==false?'<span class="pill good">ขายอยู่</span>':'<span class="pill neu">พักขาย</span>'}</td><td class="n"><button class="btn sm g" onclick="editGood('${g.id}')">แก้ไข</button></td></tr>`).join('')}</table></div></div>`}
+function loadGoodImg(inp){const f=inp.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{const im=new Image();im.onload=()=>{const c=document.createElement('canvas'),s=Math.min(im.width,im.height);c.width=c.height=280;
+  c.getContext('2d').drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,280,280);window._gimg=c.toDataURL('image/jpeg',0.78);document.getElementById('gImgP').innerHTML=`<img src="${window._gimg}" style="width:64px;height:64px;border-radius:10px;object-fit:cover">`};im.src=rd.result};rd.readAsDataURL(f)}
 function editGood(id){window._gimg=undefined;const g=id?S.goods.find(x=>x.id===id):{name:'',cat:'',price:0,par:0,unit:'ชิ้น',carry:false,active:true};
-  modal(`<h2>${id?'แก้ไข':'เพิ่ม'}สินค้า</h2><label class="f"><span>ชื่อสินค้า</span><input id="gN" value="${esc(g.name)}"></label>
+  modal(`<h2>${id?'แก้ไข':'เพิ่ม'}สินค้า</h2><label class="f"><span>ชื่อสินค้า</span><input id="gN" value="${esc(g.name)}"></label><label class="f"><span>คำอธิบาย (ไม่บังคับ)</span><input id="gD" value="${esc(g.desc||'')}" placeholder="เช่น Hot · ชีสละลาย ทูน่าครีมมี่"></label>
   <div class="grid g2"><label class="f"><span>หมวด</span><input id="gC" value="${esc(g.cat)}"></label><label class="f"><span>หน่วย</span><input id="gU" value="${esc(g.unit)}" placeholder="ชิ้น / ก้อน"></label>
   <label class="f"><span>ราคาขายหน้าร้าน (บาท)</span><input type="number" id="gP" value="${g.price}"></label><label class="f"><span>ผลิตปกติต่อวัน</span><input type="number" id="gPa" value="${g.par}"></label></div>
   <div class="row mb"><span id="gImgP">${thumb(g,64)}</span><label class="btn sm" style="cursor:pointer">เปลี่ยนรูป<input type="file" accept="image/*" id="gImg" style="display:none" onchange="loadGoodImg(this)"></label>${g.img?'<button class="btn sm g" onclick="window._gimg=\'\';document.getElementById(\'gImgP\').innerHTML=\'\'">ลบรูป</button>':''}</div>
   <div class="grid g2"><label class="f"><span>ที่มาของสินค้า</span><select id="gSrc"><option value="make" ${!isBuy(g)?'selected':''}>ผลิตเอง</option><option value="buy" ${isBuy(g)?'selected':''}>ซื้อ/รับมาขายต่อ</option></select></label><label class="f"><span>ทุนต่อชิ้น (สำหรับของซื้อมาขาย)</span><input type="number" step="any" id="gCost" value="${g.cost||''}"></label></div>
   <label style="display:flex;gap:8px;margin-bottom:10px"><input type="checkbox" id="gCa" ${g.carry?'checked':''} style="width:auto"> ของเหลือขายต่อวันถัดไปได้ (เช่น ขนมปังก้อน)</label>
   <label style="display:flex;gap:8px;margin-bottom:16px"><input type="checkbox" id="gAc" ${g.active!==false?'checked':''} style="width:auto"> เปิดขายอยู่</label>
-  <div class="row end"><button class="btn" onclick="closeModal()">ยกเลิก</button><button class="btn p" id="gOk">บันทึก</button></div>`);
+  <div class="row end">${id?`<button class="btn g" style="margin-right:auto;color:var(--terra-d)" onclick="delGood('${id}')">🗑 ลบเมนู</button>`:''}<button class="btn" onclick="closeModal()">ยกเลิก</button><button class="btn p" id="gOk">บันทึก</button></div>`);
   document.getElementById('gOk').onclick=()=>{if(!val('gN').trim())return toast('ระบุชื่อสินค้า');
-    const o={...(window._gimg!==undefined?{img:window._gimg}:{}),name:val('gN').trim(),cat:val('gC').trim()||'อื่นๆ',unit:val('gU').trim()||'ชิ้น',price:+val('gP')||0,par:Math.round(+val('gPa')||0),carry:document.getElementById('gCa').checked,active:document.getElementById('gAc').checked,src:val('gSrc'),cost:+val('gCost')||0};
+    const nm=val('gN').trim();if(S.goods.some(x=>x.id!==id&&!x.archived&&x.name.toLowerCase()===nm.toLowerCase()))return toast('มีเมนูชื่อนี้อยู่แล้ว');
+    const o={...(window._gimg!==undefined?{img:window._gimg}:{}),name:nm,desc:val('gD').trim(),cat:val('gC').trim()||'อื่นๆ',unit:val('gU').trim()||'ชิ้น',price:+val('gP')||0,par:Math.round(+val('gPa')||0),carry:document.getElementById('gCa').checked,active:document.getElementById('gAc').checked,src:val('gSrc'),cost:+val('gCost')||0};
     if(id)Object.assign(g,o);else S.goods.push({id:uid(),...o});syncProducts();save();closeModal();toast('บันทึกแล้ว');rerender()};
 }
+
+/* ================= เมนูสินค้า (จัดการเมนู) ================= */
+function goodUsed(id){return S.pmoves.some(m=>m.gid===id)||S.worders.some(o=>(o.items||[]).some(i=>i.gid===id))}
+function delGood(id){const g=S.goods.find(x=>x.id===id);if(!g)return;const used=goodUsed(id);
+  confirmBox(used?`ลบ <b>${esc(g.name)}</b> ออกจากเมนู?<br><span class="muted" style="font-size:13px">เมนูนี้มีประวัติผลิต/ขายแล้ว ระบบจะเก็บประวัติไว้ในรายงานเดิม และย้ายไป “เมนูที่ลบแล้ว” — กู้คืนได้</span>`:`ลบ <b>${esc(g.name)}</b> ถาวร?<br><span class="muted" style="font-size:13px">ยังไม่มีประวัติผลิต/ขาย ลบแล้วกู้คืนไม่ได้</span>`,()=>{
+    if(used)Object.assign(g,{archived:true,active:false});else S.goods=S.goods.filter(x=>x.id!==id);
+    syncProducts();save();toast('ลบ '+g.name+' แล้ว');rerender()})}
+function restoreGood(id){const g=S.goods.find(x=>x.id===id);if(!g)return;
+  if(S.goods.some(x=>x.id!==id&&!x.archived&&x.name.toLowerCase()===g.name.toLowerCase()))return toast('มีเมนูชื่อนี้อยู่แล้ว — เปลี่ยนชื่อก่อน');
+  Object.assign(g,{archived:false,active:true});syncProducts();save();closeModal();toast('กู้คืน '+g.name+' แล้ว');rerender()}
+function archivedGoods(){const L=S.goods.filter(g=>g.archived);
+  modal(`<h2>เมนูที่ลบแล้ว</h2>${L.length?L.map(g=>`<div class="list-item">${thumb(g,40)}<div style="flex:1"><b>${esc(g.name)}</b><div class="muted" style="font-size:13px">${esc(g.cat||'')} · ฿${g.price}</div></div><button class="btn sm" onclick="restoreGood('${g.id}')">กู้คืน</button></div>`).join(''):'<div class="empty">ไม่มี</div>'}
+  <div class="row end" style="margin-top:14px"><button class="btn" onclick="closeModal()">ปิด</button></div>`)}
+function setGoodActive(id,v){const g=S.goods.find(x=>x.id===id);if(!g)return;g.active=v;syncProducts();save();toast(v?'เปิดขาย '+g.name:'พักขาย '+g.name);rerender()}
+VIEWS.menu=()=>{const f=ui.mf||'all',q=(ui.mq||'').trim().toLowerCase();
+  const list=S.goods.filter(g=>!g.archived),cats=[...new Set(list.map(g=>g.cat||'อื่นๆ'))],arch=S.goods.filter(g=>g.archived).length;
+  const shown=list.filter(g=>(f==='all'||(f==='off'?g.active===false:f==='noprice'?!+g.price:(g.cat||'อื่นๆ')===f))&&(!q||(g.name+' '+(g.desc||'')).toLowerCase().includes(q)));
+  const noPrice=list.filter(g=>!+g.price).length,chip=(k,t)=>`<button class="${f===k?'on':''}" onclick="ui.mf='${k}';rerender()">${t}</button>`;
+  return head('เมนูสินค้า',`${list.length} เมนู · เพิ่ม แก้ไข ใส่รูป ตั้งราคา พักขาย หรือลบเมนู`,`<button class="btn p" onclick="editGood()">+ เพิ่มเมนูใหม่</button>`)+
+  (noPrice?`<div class="note mb" style="background:var(--warn-l)">⚠ มี ${noPrice} เมนูที่ยังไม่ตั้งราคา — ยอดขายของเมนูเหล่านี้จะเป็น 0 บาท <a href="javascript:void 0" onclick="ui.mf='noprice';rerender()">ดูรายการ</a></div>`:'')+
+  `<div class="row mb" style="flex-wrap:wrap;gap:10px"><div class="tabs" style="flex-wrap:wrap">${chip('all','ทั้งหมด')}${cats.map(c=>chip(c,esc(c))).join('')}${chip('off','พักขาย')}${noPrice?chip('noprice','ยังไม่ตั้งราคา'):''}</div><span class="sp"></span>
+   <input id="mq" placeholder="ค้นหาเมนู…" value="${esc(ui.mq||'')}" style="max-width:220px" oninput="ui.mq=this.value;clearTimeout(window._mqT);window._mqT=setTimeout(()=>{rerender();const e=document.getElementById('mq');if(e){e.focus();e.setSelectionRange(e.value.length,e.value.length)}},250)">
+   ${arch?`<button class="btn sm g" onclick="archivedGoods()">เมนูที่ลบแล้ว (${arch})</button>`:''}</div>
+  <div class="mn-grid">${shown.map(g=>{const im=gImg(g);return `<div class="card mn-card${g.active===false?' off':''}">
+    <div class="mn-img" onclick="editGood('${g.id}')">${im?`<img src="${im}" alt="">`:`<div class="mn-ph">ยังไม่มีรูป<br><small>กดเพื่อใส่รูป</small></div>`}${g.active===false?'<span class="pill neu mn-tag">พักขาย</span>':''}</div>
+    <div class="mn-body"><div class="row" style="gap:6px;flex-wrap:nowrap"><b style="flex:1">${esc(g.name)}</b>${+g.price?`<b class="mn-price">฿${money(g.price)}</b>`:'<span class="pill warn">ยังไม่ตั้งราคา</span>'}</div>
+     <div class="muted" style="font-size:13px;margin:4px 0 8px;min-height:18px">${esc(g.desc||'')}</div>
+     <div class="row" style="gap:6px;flex-wrap:wrap"><span class="pill neu">${esc(g.cat||'อื่นๆ')}</span>${isBuy(g)?'<span class="pill olive">ซื้อมาขาย</span>':'<span class="pill neu">ผลิตเอง</span>'}<span class="muted" style="font-size:12px">${g.par||0} ${esc(g.unit||'')}/วัน</span></div>
+     <div class="row" style="margin-top:12px;gap:8px"><label class="row" style="gap:6px;font-size:13px;cursor:pointer;flex:1"><input type="checkbox" style="width:auto" ${g.active!==false?'checked':''} onchange="setGoodActive('${g.id}',this.checked)"> เปิดขาย</label>
+      <button class="btn sm" onclick="editGood('${g.id}')">แก้ไข</button><button class="btn sm g" title="ลบเมนู" onclick="delGood('${g.id}')">🗑</button></div></div></div>`}).join('')||'<div class="empty" style="grid-column:1/-1">ไม่พบเมนู</div>'}</div>`}
 
 /* ================= WHOLESALE (ลูกค้าส่ง) ================= */
 const WST={pending:['รอเตรียม','warn'],prepared:['เตรียมแล้ว','terra'],delivered:['ส่งแล้ว','good'],cancelled:['ยกเลิก','neu']};
