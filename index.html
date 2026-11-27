@@ -317,7 +317,7 @@ function migrate(d){if(!d.goods||d.menuV!==2){Object.assign(d,seedProd());d.menu
   if(!d.shiftV){d.shiftV=1;d.payroll={u1:{type:'monthly',rate:12000},u2:{type:'monthly',rate:11500},u3:{type:'hourly',rate:65}};
     (d.attendance||[]).filter(a=>a.uid==='u3').forEach(a=>{const i=new Date(a.date+'T15:0'+Math.floor(Math.random()*9)+':00'),o=new Date(a.date+'T20:'+pad(Math.floor(Math.random()*40))+':00');a.in=i.toISOString();a.out=o.toISOString()})}
   return applyDefaults(d)}
-function applyDefaults(d){if(!LIVE&&d.goods&&d.goods.length&&d.settings)addMenuV2(d);if(!d.settings.shiftTpl)d.settings.shiftTpl=DEF_SHIFTS();if(d.settings.graceMin==null)d.settings.graceMin=5;d.shifts=d.shifts||[];d.payroll=d.payroll||{};
+function applyDefaults(d){if(!LIVE&&d.settings&&(d.settings.shiftModeV||0)<1){d.settings.useShifts=false;d.settings.shiftModeV=1}if(!LIVE&&d.goods&&d.goods.length&&d.settings)addMenuV2(d);if(!d.settings.shiftTpl)d.settings.shiftTpl=DEF_SHIFTS();if(d.settings.graceMin==null)d.settings.graceMin=5;d.shifts=d.shifts||[];d.payroll=d.payroll||{};
   (d.users||[]).forEach(u=>{if(u.role!=='staff')return;if(!u.empType)u.empType=u.id==='u3'?'extra':'full';if(!u.defShift)u.defShift=u.empType==='extra'?'E':'M';if(!u.workDays)u.workDays=[1,2,3,4,5,6]});
   d.products=(d.goods||[]).filter(g=>g.active!==false).map(g=>g.name);
   d.settings.member=Object.assign({bahtPerPoint:25,bdayPerk:'รับ Croissant ฟรี 1 ชิ้น (1 ครั้งในเดือนเกิด)',
@@ -383,7 +383,7 @@ function sumSales(from,to){return SL().filter(s=>s.date>=from&&s.date<=to).reduc
 function billsSum(from,to){return SL().filter(s=>s.date>=from&&s.date<=to).reduce((a,s)=>a+(+s.bills||0),0)}
 function workHours(a){if(!a.out)return 0;return Math.max(0,(new Date(a.out)-new Date(a.in))/36e5)}
 function netHours(a){const h=workHours(a),s=shiftOf(a.uid,a.date),b=s?(+s.brk||0):S.settings.breakHours;return h>5?h-b:h}
-function isLate(a){const s=shiftOf(a.uid,a.date),st=s?s.start:S.settings.shiftStart;return toMin(hm(a.in))>toMin(st)+(+S.settings.graceMin||0)}
+function isLate(a){if(!useShifts())return false;const s=shiftOf(a.uid,a.date),st=s?s.start:S.settings.shiftStart;return toMin(hm(a.in))>toMin(st)+(+S.settings.graceMin||0)}
 function otSuggest(a){const s=shiftOf(a.uid,a.date);return Math.max(0,netHours(a)-(s?shiftHrs(s):S.settings.stdHours))}
 function pct(a,b){if(!b)return '';const p=(a-b)/b*100;return `<span class="${p>=0?'up':'down'}">${p>=0?'▲':'▼'} ${Math.abs(p).toFixed(1)}%</span>`}
 function pendingCount(){return S.leaves.filter(l=>l.status==='pending').length+S.ot.filter(o=>o.status==='pending').length}
@@ -526,8 +526,8 @@ function timeStaff(){
   const tot=mine.reduce((s,x)=>s+netHours(x),0), late=mine.filter(isLate).length;
   const otA=S.ot.filter(o=>o.uid===ME.id&&o.status==='approved'&&o.date.startsWith(mo)).reduce((s,o)=>s+ +o.hours,0);
   let btn, line;const myFo=S.attendance.filter(x=>x.uid===ME.id&&!x.out&&x.date<t);
-  if(!a){btn=`<button class="big-btn in" onclick="clockIn()">เข้างาน<small>📍 เช็คอินที่ร้าน</small></button>`;const sf=shiftOf(ME.id,today());line='ยังไม่ได้ลงเวลาวันนี้ · '+(sf?'วันนี้ '+shiftPill(sf):'วันนี้เป็น<b>วันหยุด</b>ตามตารางกะ')}
-  else if(!a.out){btn=`<button class="big-btn out" onclick="clockOut()">ออกงาน<small>📍 เช็คอินออก</small></button>`;line=`เข้างานเมื่อ <b>${hm(a.in)}</b> ${isLate(a)?'<span class="pill warn">สาย</span>':'<span class="pill good">ตรงเวลา</span>'} ${locPill(a.inLoc)}`}
+  if(!a){btn=`<button class="big-btn in" onclick="clockIn()">เข้างาน<small>📍 เช็คอินที่ร้าน</small></button>`;const sf=shiftOf(ME.id,today());line='ยังไม่ได้ลงเวลาวันนี้ · '+(sf?'วันนี้ '+shiftPill(sf):useShifts()?'วันนี้เป็น<b>วันหยุด</b>ตามตารางกะ':'กดเข้างานเมื่อมาถึงร้าน')}
+  else if(!a.out){btn=`<button class="big-btn out" onclick="clockOut()">ออกงาน<small>📍 เช็คอินออก</small></button>`;line=`เข้างานเมื่อ <b>${hm(a.in)}</b> ${isLate(a)?'<span class="pill warn">สาย</span>':(useShifts()?'<span class="pill good">ตรงเวลา</span>':'')} ${locPill(a.inLoc)}`}
   else {btn=`<button class="big-btn in" disabled style="opacity:.5">ลงเวลาครบแล้ว</button>`;line=`วันนี้ ${hm(a.in)} – ${hm(a.out)} · ${num(netHours(a))} ชม.${otSuggest(a)>0.25?` · <a href="#" onclick="openOT('${a.date}',${otSuggest(a).toFixed(1)});return false" style="color:var(--terra)">ขอ OT ${num(otSuggest(a))} ชม.</a>`:''}`}
   return head('ลงเวลาทำงาน','สวัสดีค่ะ '+esc(ME.name)+' · '+esc(ME.pos))+(myFo.length?`<div class="note mb" style="background:var(--warn-l)">⚠ คุณลืมกดออกงานวันที่ ${myFo.map(x=>thDate(x.date)).join(', ')} — แจ้งเจ้าของร้านให้ใส่เวลาออกให้ ไม่อย่างนั้นชั่วโมงวันนั้นจะไม่ถูกนับ</div>`:'')+`
   <div class="grid g21">
@@ -538,7 +538,7 @@ function timeStaff(){
     </div>
   </div>
   <div class="card" style="margin-top:16px"><h3>ประวัติลงเวลา — ${thMonth(mo)}</h3><div class="tbl"><table><tr><th>วันที่</th><th>เข้า</th><th>ออก</th><th class="n">ชม.สุทธิ</th><th>สถานะ</th><th>ตำแหน่ง เข้า / ออก</th></tr>
-  ${mine.map(x=>`<tr><td>${thDay(x.date)}</td><td>${hm(x.in)}</td><td>${x.out?hm(x.out):'—'}</td><td class="n">${x.out?num(netHours(x)):'—'}</td><td>${isLate(x)?'<span class="pill warn">สาย</span>':'<span class="pill good">ตรงเวลา</span>'} ${otSuggest(x)>0.25?`<span class="pill terra">เกิน ${num(otSuggest(x))} ชม.</span>`:''}</td><td>${locPill(x.inLoc,x.editedBy)} ${x.outLoc?locPill(x.outLoc):''}</td></tr>`).join('')||'<tr><td colspan="6" class="empty">ยังไม่มีข้อมูล</td></tr>'}
+  ${mine.map(x=>`<tr><td>${thDay(x.date)}</td><td>${hm(x.in)}</td><td>${x.out?hm(x.out):'—'}</td><td class="n">${x.out?num(netHours(x)):'—'}</td><td>${isLate(x)?'<span class="pill warn">สาย</span>':(useShifts()?'<span class="pill good">ตรงเวลา</span>':'')} ${otSuggest(x)>0.25?`<span class="pill terra">เกิน ${num(otSuggest(x))} ชม.</span>`:''}</td><td>${locPill(x.inLoc,x.editedBy)} ${x.outLoc?locPill(x.outLoc):''}</td></tr>`).join('')||'<tr><td colspan="6" class="empty">ยังไม่มีข้อมูล</td></tr>'}
   </table></div></div>`;
 }
 AFTER.time=()=>{clearInterval(clockTimer);const c=()=>{const e=document.getElementById('clk');if(!e)return clearInterval(clockTimer);const d=new Date();e.textContent=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds())};c();clockTimer=setInterval(c,1000)};
@@ -623,13 +623,14 @@ function timeOwner(){
   <div class="card mb"><h3>รายวัน<span class="r row"><button class="btn sm" onclick="dayMap('${d}')">🗺 แผนที่เช็คอิน</button><input type="date" value="${d}" style="width:auto" onchange="ui.timeDate=this.value;rerender()"></span></h3>
   <div class="tbl"><table><tr><th>พนักงาน</th><th>กะ</th><th>เข้า</th><th>ออก</th><th class="n">ชม.สุทธิ</th><th>สถานะ</th><th>ตำแหน่ง เข้า / ออก</th><th></th></tr>
   ${rows.map(({u,a,lv})=>`<tr><td><b>${esc(u.name)}</b><div style="font-size:12px;color:var(--muted)">${u.empType==='extra'?'Extra':esc(u.pos)}</div></td><td>${shiftPill(shiftOf(u.id,d))}</td><td>${a?hm(a.in):'—'}</td><td>${a&&a.out?hm(a.out):'—'}</td><td class="n">${a&&a.out?num(netHours(a)):'—'}</td>
-  <td>${lv?`<span class="pill neu">${lv.type}</span>`:!a?(shiftOf(u.id,d)?(d<today()||(d===today()&&hm(new Date().toISOString())>shiftOf(u.id,d).start)?'<span class="pill bad">ขาด / ยังไม่เข้า</span>':'<span class="pill neu">ยังไม่ถึงกะ</span>'):'<span class="pill neu">วันหยุด</span>'):(isLate(a)?'<span class="pill warn">สาย</span>':'<span class="pill good">ตรงเวลา</span>')+(!a.out?(d<today()?' <span class="pill bad">ลืมกดออก</span>':' <span class="pill terra">กำลังทำงาน</span>'):'')+(a&&otSuggest(a)>0.25?` <span class="pill terra">เกิน ${num(otSuggest(a))} ชม.</span>`:'')}</td>
+  <td>${lv?`<span class="pill neu">${lv.type}</span>`:!a?(shiftOf(u.id,d)?(d<today()||(d===today()&&hm(new Date().toISOString())>shiftOf(u.id,d).start)?'<span class="pill bad">ขาด / ยังไม่เข้า</span>':'<span class="pill neu">ยังไม่ถึงกะ</span>'):(useShifts()?'<span class="pill neu">วันหยุด</span>':'<span class="pill neu">ไม่ได้ลงเวลา</span>')):(isLate(a)?'<span class="pill warn">สาย</span>':(useShifts()?'<span class="pill good">ตรงเวลา</span>':''))+(!a.out?(d<today()?' <span class="pill bad">ลืมกดออก</span>':' <span class="pill terra">กำลังทำงาน</span>'):'')+(a&&otSuggest(a)>0.25?` <span class="pill terra">เกิน ${num(otSuggest(a))} ชม.</span>`:'')}</td>
   <td>${a?locPill(a.inLoc,a.editedBy)+' '+(a.outLoc?locPill(a.outLoc):''):'—'}</td><td class="n"><button class="btn sm g" onclick="editAtt('${u.id}','${d}')">แก้ไข</button></td></tr>`).join('')}</table></div></div>
   <div class="card"><h3>สรุปรายเดือน<span class="r"><input type="month" value="${mo}" style="width:auto" onchange="ui.timeMonth=this.value;rerender()"></span></h3>
   <div class="tbl"><table><tr><th>พนักงาน</th><th class="n">ตามตาราง</th><th class="n">มาทำงาน</th><th class="n">ขาด</th><th class="n">ชม.สุทธิ</th><th class="n">มาสาย</th><th class="n">OT อนุมัติ</th><th class="n">วันลา</th><th class="n">นอกพื้นที่</th><th class="n">แก้ไขโดยเจ้าของ</th></tr>
   ${sum.map(s=>`<tr><td><b>${esc(s.u.name)}</b></td><td class="n">${s.sched}</td><td class="n">${s.days}</td><td class="n">${s.abs?`<span class="pill bad">${s.abs}</span>`:0}</td><td class="n">${num(s.hrs)}</td><td class="n">${s.late?`<span class="pill warn">${s.late}</span>`:0}</td><td class="n">${num(s.ot)} ชม.</td><td class="n">${s.lv}</td><td class="n">${s.off?`<span class="pill bad">${s.off}</span>`:0}</td><td class="n">${s.man}</td></tr>`).join('')}</table></div>
-  <div class="note" style="margin-top:12px">มาสาย = เข้าหลังเวลาเริ่มกะของคนนั้นในวันนั้นเกิน ${S.settings.graceMin} นาที · ชั่วโมงเกินกะ = ทำงานเกินชั่วโมงของกะ · จัดกะได้ที่เมนู “ตารางกะ”</div></div>`;
+  <div class="note" style="margin-top:12px">${useShifts()?'':'⏸ ปิดระบบกะอยู่ (ไม่คิดมาสาย/ขาดงาน — เปิดได้ที่เมนู “ตารางกะ”) · '}มาสาย = เข้าหลังเวลาเริ่มกะของคนนั้นในวันนั้นเกิน ${S.settings.graceMin} นาที · ชั่วโมงเกินกะ = ทำงานเกินชั่วโมงของกะ · จัดกะได้ที่เมนู “ตารางกะ”</div></div>`;
 }
+function setUseShifts(v){S.settings.useShifts=!!v;save();toast(v?'เปิดใช้ระบบกะแล้ว':'ปิดระบบกะแล้ว — ไม่คิดมาสาย/ขาดงาน');rerender()}
 function quickOut(id,t){const a=S.attendance.find(x=>x.id===id);if(!a)return;let o=new Date(a.date+'T'+t+':00');if(o<=new Date(a.in))o=new Date(o.getTime()+864e5);
   a.out=o.toISOString();a.editedBy=ME.id;save();toast('ใส่เวลาออก '+t+' ให้ '+U(a.uid).name+' แล้ว');rerender()}
 const forgotOut=()=>S.attendance.filter(a=>!a.out&&a.date<today()).sort((x,y)=>y.date.localeCompare(x.date));
@@ -1460,25 +1461,28 @@ const shiftsOK=()=>!LIVE||SERVER_V>=6;
 const tplOf=id=>(S.settings.shiftTpl||[]).find(t=>t.id===id);
 const toMin=s=>{const [h,m]=String(s||'0:0').split(':');return (+h)*60+(+m||0)};
 /* กะของคนนี้ในวันนี้: ตารางที่จัดไว้ → ค่าเริ่มต้นของคน → null = วันหยุด */
-function shiftOf(uid,date){const r=S.shifts.find(x=>x.uid===uid&&x.date===date);
+const useShifts=()=>S.settings.useShifts!==false;
+function shiftOf(uid,date){return useShifts()?shiftRaw(uid,date):null}
+function shiftRaw(uid,date){const r=S.shifts.find(x=>x.uid===uid&&x.date===date);
   if(r){if(r.tpl==='OFF')return null;const t=tplOf(r.tpl)||{};return {tpl:r.tpl,name:r.tpl==='C'?'กะพิเศษ':t.name,start:r.start||t.start,end:r.end||t.end,brk:r.brk??t.brk??S.settings.breakHours,color:t.color||'#5C6055',note:r.note,custom:true}}
   const u=S.users.find(x=>x.id===uid);if(!u||u.role!=='staff')return null;const dow=new Date(date+'T00:00').getDay();
   if(!(u.workDays||[1,2,3,4,5,6]).includes(dow))return null;const t=tplOf(u.defShift||'M');if(!t)return null;return {tpl:t.id,name:t.name,start:t.start,end:t.end,brk:t.brk,color:t.color}}
 const shiftHrs=s=>s?Math.max(0,(toMin(s.end)-toMin(s.start))/60-(+s.brk||0)):0;
-const shiftPill=s=>s?`<span class="pill" style="background:${s.color}22;color:${s.color};border:1px solid ${s.color}55">${esc(s.name)} ${s.start}–${s.end}</span>`:'<span class="pill neu">หยุด</span>';
+const shiftPill=s=>s?`<span class="pill" style="background:${s.color}22;color:${s.color};border:1px solid ${s.color}55">${esc(s.name)} ${s.start}–${s.end}</span>`:(useShifts()?'<span class="pill neu">หยุด</span>':'<span class="muted">—</span>');
 VIEWS.shifts=()=>{const own=isOwner(),ws=ui.wkStart||weekStart(today()),days=[...Array(7)].map((_,i)=>addDays(ws,i)),staff=S.users.filter(u=>u.role==='staff'),t=today();
   return head('ตารางกะ',own?'จัดกะรายวันของพนักงาน · สลับกะ · คัดลอกจากสัปดาห์ก่อน':'ตารางกะของทีม (แก้ไขได้เฉพาะผู้จัดการ)',
-    own&&shiftsOK()?`<button class="btn" onclick="copyWeek('${ws}')">คัดลอกจากสัปดาห์ก่อน</button><button class="btn" onclick="swapForm('${ws}')">⇄ สลับกะ</button>`:'')+
+    (own?`<label class="row" style="gap:6px;font-size:14px;cursor:pointer"><input type="checkbox" style="width:auto" ${useShifts()?'checked':''} onchange="setUseShifts(this.checked)"> ใช้ระบบกะ</label>`:'')+(own&&shiftsOK()&&useShifts()?`<button class="btn" onclick="copyWeek('${ws}')">คัดลอกจากสัปดาห์ก่อน</button><button class="btn" onclick="swapForm('${ws}')">⇄ สลับกะ</button>`:''))+
+  (!useShifts()?'<div class="note mb" style="background:var(--warn-l)">⏸ ปิดระบบกะอยู่ — ไม่คิดมาสาย / ขาดงาน / ไม่ใช้เวลาเลิกกะ · ระบบนับแค่ชั่วโมงจริงจากเวลาเข้า–ออก (ตารางด้านล่างแสดงไว้เฉยๆ) · ติ๊ก “ใช้ระบบกะ” เพื่อเปิดกลับ</div>':'')+
   (own&&!shiftsOK()?'<div class="note mb" style="background:var(--warn-l)">⚠ ต้องอัปเดตโค้ด Apps Script (Code.gs) และ Deploy เวอร์ชันใหม่ก่อน จึงจะบันทึกตารางกะได้</div>':'')+`
   <div class="row mb"><button class="btn sm" onclick="ui.wkStart='${addDays(ws,-7)}';rerender()">◀</button><b>${thDate(ws)} – ${thDate(addDays(ws,6))}</b><button class="btn sm" onclick="ui.wkStart='${addDays(ws,7)}';rerender()">▶</button>${ws!==weekStart(t)?`<button class="btn sm g" onclick="ui.wkStart='';rerender()">สัปดาห์นี้</button>`:''}</div>
   <div class="card mb"><div class="tbl"><table class="roster"><tr><th>พนักงาน</th>${days.map(d=>`<th style="text-align:center;${d===t?'color:var(--terra-d)':''}">${DOWS[new Date(d+'T00:00').getDay()]} ${+d.slice(8)}</th>`).join('')}<th class="n">ชม./สัปดาห์</th></tr>
   ${staff.map(u=>{let hrs=0;return `<tr style="${u.id===ME.id?'background:#FFF8F4':''}"><td><b>${esc(u.name)}</b><div style="font-size:12px;color:var(--muted)">${u.empType==='extra'?'Extra / Part-time':'ประจำ'}</div></td>
-    ${days.map(d=>{const s=shiftOf(u.id,d);hrs+=shiftHrs(s);const lv=S.leaves.find(l=>l.uid===u.id&&l.status==='approved'&&l.from<=d&&l.to>=d);
+    ${days.map(d=>{const s=shiftRaw(u.id,d);hrs+=shiftHrs(s);const lv=S.leaves.find(l=>l.uid===u.id&&l.status==='approved'&&l.from<=d&&l.to>=d);
       return `<td style="text-align:center;${own&&shiftsOK()?'cursor:pointer':''}" ${own&&shiftsOK()?`onclick="shiftForm('${u.id}','${d}')"`:''}>${lv?`<span class="pill neu">${lv.type}</span>`:s?`<div class="sc" style="border-color:${s.color};color:${s.color}"><b>${esc(s.name.replace(/ \(.*\)/,''))}</b><div>${s.start}–${s.end}</div>${s.note?`<div class="sn">${esc(s.note)}</div>`:''}</div>`:'<span style="color:#CFC8BC">หยุด</span>'}</td>`}).join('')}
     <td class="n"><b>${num(hrs)}</b></td></tr>`}).join('')}</table></div>
   <div class="row" style="margin-top:12px;gap:6px">${(S.settings.shiftTpl||[]).map(t=>shiftPill(t)).join('')}${own?`<span class="sp"></span><button class="btn sm g" onclick="go('staff')">ตั้งค่ากะ / ค่าเริ่มต้นของแต่ละคน →</button>`:''}</div></div>`;
 };
-function shiftForm(uid,d){const s=S.shifts.find(x=>x.uid===uid&&x.date===d),cur=shiftOf(uid,d),T=S.settings.shiftTpl||[];
+function shiftForm(uid,d){const s=S.shifts.find(x=>x.uid===uid&&x.date===d),cur=shiftRaw(uid,d),T=S.settings.shiftTpl||[];
   modal(`<h2>${esc(U(uid).name)} · ${thDay(d)}</h2><p class="hint" style="margin:-8px 0 12px">ตอนนี้: ${shiftPill(cur)}${s?'':' (ค่าเริ่มต้น)'}</p>
   <div class="grid g2" style="gap:8px;margin-bottom:12px">${T.map(t=>`<button class="btn" style="justify-content:flex-start;border-color:${t.color}" onclick="setShift('${uid}','${d}','${t.id}')">${esc(t.name)}<span class="sp"></span><span style="font-size:12px;color:var(--muted)">${t.start}–${t.end}</span></button>`).join('')}<button class="btn" onclick="setShift('${uid}','${d}','OFF')">หยุด</button></div>
   <details ${s&&s.tpl==='C'?'open':''}><summary style="cursor:pointer;font-size:13.5px;color:var(--ink2);margin-bottom:8px">กำหนดเวลาเอง</summary><div class="grid g3" style="gap:8px"><input type="time" id="scS" value="${cur?cur.start:'09:00'}"><input type="time" id="scE" value="${cur?cur.end:'18:00'}"><button class="btn" onclick="setShift('${uid}','${d}','C')">ใช้เวลานี้</button></div></details>
@@ -1498,7 +1502,7 @@ function swapForm(ws){const staff=S.users.filter(u=>u.role==='staff'),o=staff.ma
   <div class="row end"><button class="btn" onclick="closeModal()">ยกเลิก</button><button class="btn p" id="swOk">สลับกะ</button></div>`,440);
   document.getElementById('swB').selectedIndex=Math.min(1,staff.length-1);
   document.getElementById('swOk').onclick=()=>{const d=val('swD'),a=val('swA'),b=val('swB'),n=val('swN').trim();if(a===b)return toast('เลือกคนละคน');
-    const sa=shiftOf(a,d),sb=shiftOf(b,d),put=(uid,s,other)=>{const id=d+'_'+uid;S.shifts=S.shifts.filter(x=>x.id!==id);
+    const sa=shiftRaw(a,d),sb=shiftRaw(b,d),put=(uid,s,other)=>{const id=d+'_'+uid;S.shifts=S.shifts.filter(x=>x.id!==id);
       S.shifts.push(s?{id,date:d,uid,tpl:s.tpl||'C',start:s.start,end:s.end,brk:s.brk,note:'สลับกับ '+U(other).name+(n?' · '+n:''),by:ME.id,at:new Date().toISOString()}:{id,date:d,uid,tpl:'OFF',note:'สลับกับ '+U(other).name+(n?' · '+n:''),by:ME.id,at:new Date().toISOString()})};
     put(a,sb,b);put(b,sa,a);save();closeModal();toast(`สลับกะ ${U(a).name} ⇄ ${U(b).name} แล้ว`);rerender()}}
 
@@ -1986,6 +1990,7 @@ function bootstrapIfEmpty(){if(!isOwner())return;let ch=false;
   if(!S.items.length){S.items=defaultItems(false);ch=true}
   if(seedSourdoughRecipe(S))ch=true;
   if(S.goods.length&&addMenuV2(S))ch=true;
+  if(isOwner()&&(S.settings.shiftModeV||0)<1){S.settings.useShifts=false;S.settings.shiftModeV=1;ch=true}
   if(ch||!SNAP.kv.settings)save()}
 function showBoot(msg,err){const b=document.getElementById('bootMsg');if(!b)return;b.style.display='block';b.innerHTML=err?`<div style="color:#F3B6A8">${msg}</div><button class="btn" style="margin-top:12px" onclick="location.reload()">ลองใหม่</button>`:`<div class="spin" style="border-color:rgba(255,255,255,.15);border-top-color:#E58B5C"></div><div style="margin-top:12px">${msg}</div>`;document.querySelector('.login-card').style.display=err||msg?'none':''}
 function hideBoot(){const b=document.getElementById('bootMsg');if(b)b.style.display='none';document.querySelector('.login-card').style.display=''}
